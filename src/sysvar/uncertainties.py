@@ -17,6 +17,10 @@ class MultiDimArrayError(Exception):
     pass
 
 
+class NonMatchingCorrections(Exception):
+    pass
+
+
 class Uncertainty(ABC):
     """
     Abstract base class for representing uncertainties with a name and error values.
@@ -43,6 +47,8 @@ class Uncertainty(ABC):
         Raises:
             NotAnArrayError: If errors is not an instance of np.ndarray.
             MultiDimArrayError: If errors is not a 1D array.
+            NonMatchingCorrections: If the length of errors and corrections
+               are unequal.
 
         """
         self.correction = correction
@@ -63,8 +69,7 @@ class Uncertainty(ABC):
         """
         pass
 
-    @staticmethod
-    def _is_valid_input_errors(errors) -> Union[None, bool]:
+    def _is_valid_input_errors(self, errors) -> Union[None, bool]:
         """
         Validate the input errors.
 
@@ -77,6 +82,8 @@ class Uncertainty(ABC):
         Raises:
             NotAnArrayError: If errors is not an instance of np.ndarray.
             MultiDimArrayError: If errors is not a 1D array.
+            NonMatchingCorrections: If the length of errors and corrections
+               are unequal.
 
         """
         if not isinstance(errors, np.ndarray):
@@ -85,6 +92,10 @@ class Uncertainty(ABC):
         elif errors.ndim > 1:
             raise MultiDimArrayError("The errors must be provided as a 1D array")
 
+        elif len(errors) != len(self.correction.values):
+            raise NonMatchingCorrections(
+                f"The corrections have length of {len(self.corrections.values)}, but you are trying to pass uncertainties of length {len(errors)}."
+            )
         else:
             return True
 
