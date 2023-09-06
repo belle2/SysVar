@@ -1,4 +1,4 @@
-from abs import ABC, abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, Union
 
@@ -19,10 +19,10 @@ class Variator(ABC):
 
         self.correction = correction
         self.uncertainties = {}
-        self.total_cov_matrix = self._build_total_covariance()
 
     def add_uncertainty(self, unc: Uncertainty) -> None:
 
+        # TODO add check in case the same name is used
         self.uncertainties.update({unc.name: unc})
 
     def _build_total_covariance(self) -> np.ndarray:
@@ -38,7 +38,8 @@ class Variator(ABC):
 
     def get_correction_variations(self, Nvar: int) -> np.ndarray:
 
-        variations = self.generate_variations(Nvar, self.total_cov_matrix)
+        total_cov_matrix = self._build_total_covariance()
+        variations = self.generate_variations(Nvar, total_cov_matrix)
 
         return self.correction.values + variations
 
