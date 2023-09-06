@@ -11,12 +11,6 @@ class NotAnArrayError(Exception):
 class MultiDimArrayError(Exception):
     pass
 
-
-from abc import ABC, abstractmethod
-from typing import Union
-import numpy as np
-
-
 class Uncertainty(ABC):
     """
     Abstract base class for representing uncertainties with a name and error values.
