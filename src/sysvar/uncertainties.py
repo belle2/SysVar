@@ -5,8 +5,12 @@ from typing import Iterable, Union
 
 import numpy as np
 
-from visualize import plot_matrix_on_axis, create_double_figure, create_single_figure
-from corrections import Correction
+from sysvar.visualize import (
+    plot_matrix_on_axis,
+    create_double_figure,
+    create_single_figure,
+)
+from sysvar.corrections import Correction
 
 
 class NotAnArrayError(Exception):
