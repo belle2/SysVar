@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Iterable, Union
 
 import numpy as np
+
+from visualize import plot_matrix_on_axis, create_double_figure, create_single_figure
+from corrections import Correction
 
 
 class NotAnArrayError(Exception):
@@ -10,6 +15,7 @@ class NotAnArrayError(Exception):
 
 class MultiDimArrayError(Exception):
     pass
+
 
 class Uncertainty(ABC):
     """
@@ -26,7 +32,7 @@ class Uncertainty(ABC):
 
     """
 
-    def __init__(self, name: str, errors: np.ndarray):
+    def __init__(self, correction: Correction, name: str, errors: np.ndarray):
         """
         Initialize an Uncertainty instance with a name and error values.
 
@@ -39,6 +45,7 @@ class Uncertainty(ABC):
             MultiDimArrayError: If errors is not a 1D array.
 
         """
+        self.correction = correction
         self.name = name
         if self._is_valid_input_errors(errors):
             self.errors = errors
@@ -81,6 +88,39 @@ class Uncertainty(ABC):
         else:
             return True
 
+    def visualize_covariance(self):
+
+        fig, ax = create_single_figure()
+
+        plot_matrix_on_axis(
+            ax,
+            self.cov_matrix,
+            self.correction.build_strings(),
+            f"{self.name} Covariance matrix",
+        )
+
+        return fig, ax
+
+    def visualize_covariance_and_correlation(self):
+
+        fig, ax = create_double_figure()
+
+        plot_matrix_on_axis(
+            ax[0],
+            self.cov_matrix,
+            self.correction.build_strings(),
+            f"{self.name} Covariance matrix",
+        )
+
+        plot_matrix_on_axis(
+            ax[1],
+            self.corr_matrix,
+            self.correction.build_strings(),
+            f"{self.name} Correlation matrix",
+        )
+
+        return fig, ax
+
 
 class FullyCorrelatedUncertainty(Uncertainty):
     """
@@ -101,7 +141,7 @@ class FullyCorrelatedUncertainty(Uncertainty):
 
     """
 
-    def __init__(self, name: str, errors: Iterable):
+    def __init__(self, correction: Correction, name: str, errors: Iterable):
         """
         Initialize a FullyCorrelatedUncertainty instance with a name and error values.
 
@@ -111,7 +151,7 @@ class FullyCorrelatedUncertainty(Uncertainty):
 
         """
         self.corr_matrix = np.ones((len(errors), len(errors)))
-        super().__init__(name, np.array(errors))
+        super().__init__(correction, name, np.array(errors))
 
     def build_covariance(self) -> np.ndarray:
         """
@@ -143,7 +183,7 @@ class UncorrelatedUncertainty(Uncertainty):
 
     """
 
-    def __init__(self, name: str, errors: Iterable):
+    def __init__(self, correction: Correction, name: str, errors: Iterable):
         """
         Initialize an UncorrelatedUncertainty instance with a name and error values.
 
@@ -153,7 +193,7 @@ class UncorrelatedUncertainty(Uncertainty):
 
         """
         self.corr_matrix = np.identity(len(errors))
-        super().__init__(name, np.array(errors))
+        super().__init__(correction, name, np.array(errors))
 
     def build_covariance(self) -> np.ndarray:
         """
