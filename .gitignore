@@ -51,4 +51,6 @@ MANIFEST
 # Per-project virtualenvs
 .venv*/
 .conda*/
-.python-version
+
+#Notebooks
+*/notebooks/*.ipynb

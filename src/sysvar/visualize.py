@@ -23,3 +23,14 @@ def plot_matrix_on_axis(ax, matrix, tick_labels, title):
     ax.set_ylabel("correction bins")
 
     ax.set_title(title)
+
+
+def plot_variation_on_axis(ax, x, variation, label, color, linestyle):
+
+    ax.stairs(
+        variation,
+        x,
+        label=label,
+        color=color,
+        linestyle=linestyle,
+    )
