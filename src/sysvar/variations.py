@@ -14,22 +14,77 @@ from sysvar.visualize import (
 )
 
 
+# TODO should this really be an ABC ? Need to think about it...
 class Variator(ABC):
+
+    """
+    Abstract base class for generating variations on a correction.
+    Uncertainty objects need to be appended to the variator.
+    Then the variator will create a big covariance matrix of all the uncertainties.
+    Through the get_variations_from_uncertainty method, one can examine the effect
+    of the variations coming from a specific uncertainty.
+
+    Args:
+        correction (Correction): The correction object.
+
+    Attributes:
+        correction (Correction): The correction object.
+        uncertainties (dict): A dictionary to store uncertainties associated with the correction.
+
+    """
+
     def __init__(self, correction: Correction):
+
+        """
+        Initialize a Variator with a correction object.
+
+        Args:
+            correction (Correction): The correction object.
+
+        """
 
         self.correction = correction
         self.uncertainties = {}
 
     def add_uncertainty(self, unc: Uncertainty) -> None:
 
+        """
+        Add an uncertainty to the Variator.
+
+        Args:
+            unc (Uncertainty): The uncertainty to be added.
+
+        """
         # TODO add check in case the same name is used
         self.uncertainties.update({unc.name: unc})
 
     def _build_total_covariance(self) -> np.ndarray:
 
+        """
+        Build the total covariance matrix from all added uncertainties.
+        Here all the covariance matrices from all uncertainties are summed up
+        to a total covariance matrix
+
+        Returns:
+            np.ndarray: The total covariance matrix.
+
+        """
+
         return np.add(*[unc.cov_matrix for unc in self.uncertainties.values()])
 
     def generate_variations(self, Nvar: int, covariance: np.ndarray) -> np.ndarray:
+        """
+        Generate variations based on a covariance matrix.
+        This is using a standard multivariate normal.
+
+        Args:
+            Nvar (int): The number of variations to generate.
+            covariance (np.ndarray): The covariance matrix.
+
+        Returns:
+            np.ndarray: An array of variations.
+
+        """
         # Create a zero-ed matrix to get the dimensions right
         zeros = np.zeros(len(self.correction.values))
 
@@ -38,17 +93,54 @@ class Variator(ABC):
 
     def get_correction_variations(self, Nvar: int) -> np.ndarray:
 
+        """
+        Get variations on the correction.
+        This adds the generated variations from the total covariance matrix
+        to the nominal values of the correction.
+
+        Args:
+            Nvar (int): The number of variations to generate.
+
+        Returns:
+            np.ndarray: An array of correction variations.
+
+        """
+
         total_cov_matrix = self._build_total_covariance()
         variations = self.generate_variations(Nvar, total_cov_matrix)
 
         return self.correction.values + variations
 
     def get_variations_from_uncertainty(self, Nvar: int, name: str) -> np.ndarray:
-        """Helper function to inspect variations coming from a single source of uncertainty"""
+        """
+        Helper function to inspect variations coming from a single source of uncertainty.
+
+        Args:
+            Nvar (int): The number of variations to generate.
+            name (str): The name of the uncertainty.
+
+        Returns:
+            np.ndarray: An array of variations from the specified uncertainty.
+
+        """
 
         return self.generate_variations(Nvar, self.uncertainties[name].cov_matrix)
 
     def visualize_variations(self, Nvar: int = 5):
+
+        """
+        Visualize variations of the correction.
+        Plots the relative variations of the templates.
+        The Nvar argument specifies the number of variatios that will be plotted.
+        Defaults to 5.
+
+        Args:
+            Nvar (int, optional): The number of variations to visualize.
+
+        Returns:
+            Tuple[Figure, Axis]: A tuple containing the figure and axis objects.
+
+        """
 
         fig, ax = create_single_figure()
 
