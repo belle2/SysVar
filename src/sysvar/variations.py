@@ -155,18 +155,14 @@ class Variator(ABC):
 
         fig, ax = create_single_figure()
 
-        x_edges = np.unique(
-            np.concatenate((self.correction.lower_bounds, self.correction.upper_bounds))
-        )
-
         # Plot the nominal weights
-        plot_variation_on_axis(ax, x_edges, self.correction.values)
+        plot_variation_on_axis(ax, self.correction.value_mids, self.correction.values)
 
         variations = self.get_correction_variations(Nvar)
 
         for i in range(Nvar):
             plot_variation_on_axis(
-                ax=ax, x=x_edges, variation=variations[i, :], index=i
+                ax=ax, x=self.correction.value_mids, variation=variations[i, :], index=i
             )
 
         return fig, ax

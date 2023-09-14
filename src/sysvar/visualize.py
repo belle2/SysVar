@@ -38,11 +38,12 @@ def plot_variation_on_axis(
     Plots a variation on a given axis.
     The absence of a value for the index arguments shows that this is a nominal template.
     The function creates the correct labels, colors and linestyle based on the value
-    of the index
+    of the index.
 
     Args:
         ax (Axes): The axis to plot on.
-        x (np.ndarray): The x values for the plot.
+        x (np.ndarray): The x values for the plot. Should be the bin mid values as the
+            method makes use of the matplotlib's steps method
         variation (np.ndarray): The variation values to plot.
         index (int, None): The index of the variation (None for nominal).
 
@@ -60,4 +61,4 @@ def plot_variation_on_axis(
         color = (PALETTE[index],)
         linestyle = "solid"
 
-    ax.stairs(variation, x, label=label, color=color, linestyle=linestyle)
+    ax.steps(x, variation, label=label, color=color, linestyle=linestyle)

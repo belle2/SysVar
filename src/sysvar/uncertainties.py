@@ -110,7 +110,7 @@ class Uncertainty(ABC):
         plot_matrix_on_axis(
             ax,
             self.cov_matrix,
-            self.correction.build_strings(),
+            self.correction.strings,
             f"{self.name} Covariance matrix",
         )
 
@@ -123,14 +123,14 @@ class Uncertainty(ABC):
         plot_matrix_on_axis(
             ax[0],
             self.cov_matrix,
-            self.correction.build_strings(),
+            self.correction.strings,
             f"{self.name} Covariance matrix",
         )
 
         plot_matrix_on_axis(
             ax[1],
             self.corr_matrix,
-            self.correction.build_strings(),
+            self.correction.strings,
             f"{self.name} Correlation matrix",
         )
 
