@@ -160,19 +160,13 @@ class Variator(ABC):
         )
 
         # Plot the nominal weights
-        plot_variation_on_axis(
-            ax, x_edges, self.correction.values, "Nominal weight", "black", "dashed"
-        )
+        plot_variation_on_axis(ax, x_edges, self.correction.values)
 
         variations = self.get_correction_variations(Nvar)
-        # TODO move this from here...
-        import seaborn as sns
-
-        palette = sns.color_palette("colorblind")
 
         for i in range(Nvar):
             plot_variation_on_axis(
-                ax, x_edges, variations[i, :], f"variation {i}", palette[i], "solid"
+                ax=ax, x=x_edges, variation=variations[i, :], index=i
             )
 
         return fig, ax
