@@ -14,6 +14,10 @@ from sysvar.visualize import (
 )
 
 
+class UncertaintyWithSameNameExists(Exception):
+    pass
+
+
 # TODO should this really be an ABC ? Need to think about it...
 class Variator(ABC):
 
@@ -54,9 +58,16 @@ class Variator(ABC):
         Args:
             unc (Uncertainty): The uncertainty to be added.
 
+        Raises:
+            UncertaintyWithSameNameExists: If uncertainty with the same name has already been added to the variator.
+
         """
-        # TODO add check in case the same name is used
-        self.uncertainties.update({unc.name: unc})
+        if unc.name in self.uncertainties.keys():
+            raise UncertaintyWithSameNameExists(
+                f"An uncertainty with the name {unc.name} already exist in the set of uncertainties that the variator will consider. Make sure that you add a specific uncertainty only once, and that there are no duplicate names"
+            )
+        else:
+            self.uncertainties.update({unc.name: unc})
 
     def _build_total_covariance(self) -> np.ndarray:
 
