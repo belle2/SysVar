@@ -95,8 +95,8 @@ class Template(ABC):
         pass
 
     def add_variations(self, queries: list, variations: np.ndarray, Nvar: int):
-        # Initialize the variations
 
+        # Initialize the variations
         self.df[[f"{self.syst_weight}_var_{i}" for i in range(Nvar)]] = 1
 
         for i, q in enumerate(queries):
@@ -153,6 +153,6 @@ class Template2D(Template):
 
             plot_variation_on_axis(ax, x, v_hist / self.nom_hist, i)
 
-    ax.set_ylabel("Template relative variation")
-    ax.set_xlabel("Fitting variable")
-    ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+        ax.set_ylabel("Template relative variation")
+        ax.set_xlabel("Fitting variable")
+        ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
