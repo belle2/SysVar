@@ -17,15 +17,15 @@ def create_double_figure():
     return plt.subplots(1, 2, figsize=(16, 4.5), dpi=800)
 
 
-def plot_matrix_on_axis(ax, matrix, tick_labels, title):
+def plot_matrix_on_axis(ax, matrix, tick_labels, title, axes_labels):
 
     sns.heatmap(matrix, annot=True, cmap="Blues", ax=ax)
 
     ax.set_xticks(np.arange(len(tick_labels)) + 0.5, tick_labels)
     ax.set_yticks(np.arange(len(tick_labels)) + 0.5, tick_labels)
 
-    ax.set_xlabel("correction bins")
-    ax.set_ylabel("correction bins")
+    ax.set_xlabel(axes_labels)
+    ax.set_ylabel(axes_labels)
 
     ax.set_title(title)
 

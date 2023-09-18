@@ -112,6 +112,7 @@ class Uncertainty(ABC):
             self.cov_matrix,
             self.correction.strings,
             f"{self.name} Covariance matrix",
+            "Correction bins",
         )
 
         return fig, ax
@@ -125,6 +126,7 @@ class Uncertainty(ABC):
             self.cov_matrix,
             self.correction.strings,
             f"{self.name} Covariance matrix",
+            "Correction bins",
         )
 
         plot_matrix_on_axis(
@@ -132,6 +134,7 @@ class Uncertainty(ABC):
             self.corr_matrix,
             self.correction.strings,
             f"{self.name} Correlation matrix",
+            "Correction bins",
         )
 
         return fig, ax
