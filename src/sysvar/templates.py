@@ -131,7 +131,7 @@ class Template(ABC):
             ax,
             self.get_bin_covariance(Nvar),
             np.arange(self._get_number_of_bins()),
-            f"Covariance matrix",
+            "Covariance matrix",
             "bins",
         )
 
@@ -145,7 +145,7 @@ class Template(ABC):
             ax,
             self.get_bin_correlation(Nvar),
             np.arange(self._get_number_of_bins()),
-            f"Correlation matrix",
+            "Correlation matrix",
             "bins",
         )
 
@@ -159,7 +159,7 @@ class Template(ABC):
             ax[0],
             self.get_bin_covariance(Nvar),
             np.arange(self._get_number_of_bins()),
-            f"Covariance matrix",
+            "Covariance matrix",
             "bins",
         )
 
@@ -167,7 +167,7 @@ class Template(ABC):
             ax[1],
             self.get_bin_correlation(Nvar),
             np.arange(self._get_number_of_bins()),
-            f"Correlation matrix",
+            "Correlation matrix",
             "bins",
         )
 
