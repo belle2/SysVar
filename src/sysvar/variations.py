@@ -166,7 +166,7 @@ class Variator(ABC):
         # Plot the nominal weights
         plot_variation_on_axis(ax, self.correction.value_mids, self.correction.values)
 
-        variations = self.get_correction_variations(Nvar)
+        variations = self.get_correction_variations()
 
         for i in range(Nvar):
             plot_variation_on_axis(
