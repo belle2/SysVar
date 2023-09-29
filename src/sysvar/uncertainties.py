@@ -98,7 +98,7 @@ class Uncertainty(ABC):
 
         elif len(errors) != len(self.correction.values):
             raise NonMatchingCorrections(
-                f"The corrections have length of {len(self.corrections.values)}, but you are trying to pass uncertainties of length {len(errors)}."
+                f"The corrections have length of {len(self.correction.values)}, but you are trying to pass uncertainties of length {len(errors)}."
             )
         else:
             return True
