@@ -31,7 +31,11 @@ def plot_matrix_on_axis(ax, matrix, tick_labels, title, axes_labels):
 
 
 def plot_variation_on_axis(
-    ax: Axes, x: np.ndarray, variation: np.ndarray, index: Union[None, int] = None
+    ax: Axes,
+    x: np.ndarray,
+    variation: np.ndarray,
+    index: Union[None, int] = None,
+    plot_func: str = "step",
 ):
 
     """
@@ -46,6 +50,8 @@ def plot_variation_on_axis(
             method makes use of the matplotlib's steps method
         variation (np.ndarray): The variation values to plot.
         index (int, None): The index of the variation (None for nominal).
+        plot_func (str): name of the matplotlib.pyplot function to use for the plot
+
 
     Returns:
         None
@@ -61,4 +67,11 @@ def plot_variation_on_axis(
         color = PALETTE[index]
         linestyle = "solid"
 
-    ax.step(x, variation, label=label, color=color, linestyle=linestyle)
+    if plot_func == "step":
+        ax.step(x, variation, label=label, color=color, linestyle=linestyle)
+    elif plot_func == "stairs":
+        ax.stairs(variation, x, label=label, color=color, linestyle=linestyle)
+    else:
+        raise ValueError(
+            f"plot_func argument should be either 'step' or 'stairs' but you passed {plot_func}"
+        )

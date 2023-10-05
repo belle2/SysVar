@@ -119,7 +119,7 @@ class Variator(ABC):
 
         return self.generate_variations(Nvar, self.uncertainties[name].cov_matrix)
 
-    def visualize_variations(self, Nvar: int = 5):
+    def visualize_relative_variations(self, Nvar: int = 5):
 
         """
         Visualize variations of the correction.
@@ -137,14 +137,15 @@ class Variator(ABC):
 
         fig, ax = create_single_figure()
 
-        # Plot the nominal weights
-        plot_variation_on_axis(ax, self.correction.value_mids, self.correction.values)
-
         variations = self.get_correction_variations()
 
         for i in range(Nvar):
             plot_variation_on_axis(
-                ax=ax, x=self.correction.value_mids, variation=variations[i, :], index=i
+                ax=ax,
+                x=self.correction.value_edges,
+                variation=variations[i, :] / self.correction.values,
+                index=i,
+                plot_func="stairs",
             )
 
         return fig, ax
