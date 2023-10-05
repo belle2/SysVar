@@ -1,10 +1,12 @@
-from __future__ import predictions
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Union
 
 import numpy as np
 from pandas import DataFrame
+import seaborn as sns
+from matplotlib.colors import LogNorm
 
 from sysvar.visualize import (
     plot_matrix_on_axis,
@@ -12,6 +14,8 @@ from sysvar.visualize import (
     create_double_figure,
     create_single_figure,
 )
+from sysvar.corrections import Correction
+from sysvar.variations import Variator
 
 
 class NotADictError(Exception):
@@ -33,7 +37,8 @@ class Template(ABC):
         binning: dict,
         total_weight: str,
         syst_weight: str,
-        dependant_variables: list[str],
+        correction: Correction,
+        variator: Variator,
     ):
         if self._is_correct_binning(df.columns, binning):
             self.binning = binning
@@ -43,18 +48,27 @@ class Template(ABC):
             self.syst_weight = syst_weight
         # Make a deep copy only of the columns that are needed
         self.df = df[
-            [*binning.keys(), self.total_weight, self.syst_weight, *dependant_variables]
+            [
+                *binning.keys(),
+                self.total_weight,
+                self.syst_weight,
+                correction.dependant_variable,
+            ]
         ].copy(deep=True)
+
+        self.correction = correction
+        self.variations = variator.variations
+        self.Nvar = variator.Nvar
 
     def _is_correct_binning(self, columns: list, binning: dict) -> bool:
 
-        if self._is_a_dict(columns, binning):
+        if self._is_a_dict(binning):
             pass
         # Check if the variables exist in the dataframe
         for var_name in binning.keys():
             if self._is_existing_variable(var_name, columns):
                 continue
-        for var_name, bins in binning.keys():
+        for var_name, bins in binning.items():
             if self._is_increasing_binning(var_name, bins):
                 continue
 
@@ -93,43 +107,47 @@ class Template(ABC):
         return True
 
     def _get_number_of_bins(self):
-        return np.prod([len(bins) for bins in self.binning.values()])
+        return np.prod([len(bins) - 1 for bins in self.binning.values()])
 
     @abstractmethod
     def make_hist(self, index: Union[None, int] = None) -> np.ndarray:
         pass
 
-    def add_variations(self, queries: list, variations: np.ndarray, Nvar: int):
+    def add_variations(self):
 
         # Initialize the variations
-        self.df[[f"{self.syst_weight}_var_{i}" for i in range(Nvar)]] = 1
+        self.df.loc[:, [f"{self.syst_weight}_var_{i}" for i in range(self.Nvar)]] = 1
 
-        for i, q in enumerate(queries):
+        for i, q in enumerate(self.correction.queries):
             # Now add the variations of the corrections to the dataframe entries that
             # pass the cuts
             self.df.loc[
-                self.df.eval(q), [f"{self.syst_weight}_var_{i}" for i in range(Nvar)]
-            ] = variations[:, i]
+                self.df.eval(q),
+                [f"{self.syst_weight}_var_{j}" for j in range(self.Nvar)],
+            ] = self.variations[:, i]
 
-    def get_bin_covariance(self, Nvar: int) -> np.ndarray:
+    def _get_absolute_variations(self):
+        absolute_variations = np.empty((self._get_number_of_bins(), self.Nvar))
+        for i in range(self.Nvar):
+            absolute_variations[:, i] = self.make_hist(i)[0].flatten()
 
-        absolute_variations = [self.make_hist(i)[0].flatten() for i in Nvar]
+        return absolute_variations
 
-        return np.cov(absolute_variations)
+    def get_bin_covariance(self) -> np.ndarray:
 
-    def get_bin_correlation(self, Nvar: int) -> np.ndarray:
+        return np.cov(self._get_absolute_variations())
 
-        absolute_variations = [self.make_hist(i)[0].flatten() for i in Nvar]
+    def get_bin_correlation(self) -> np.ndarray:
 
-        return np.corrcoef(absolute_variations)
+        return np.corrcoef(self._get_absolute_variations())
 
-    def visualize_bin_covariance(self, Nvar: int):
+    def visualize_bin_covariance(self):
 
         fig, ax = create_single_figure()
 
         plot_matrix_on_axis(
             ax,
-            self.get_bin_covariance(Nvar),
+            self.get_bin_covariance(),
             np.arange(self._get_number_of_bins()),
             "Covariance matrix",
             "bins",
@@ -137,13 +155,13 @@ class Template(ABC):
 
         return fig, ax
 
-    def visualize_bin_correlation(self, Nvar: int):
+    def visualize_bin_correlation(self):
 
         fig, ax = create_single_figure()
 
         plot_matrix_on_axis(
             ax,
-            self.get_bin_correlation(Nvar),
+            self.get_bin_correlation(),
             np.arange(self._get_number_of_bins()),
             "Correlation matrix",
             "bins",
@@ -151,24 +169,30 @@ class Template(ABC):
 
         return fig, ax
 
-    def visualize_bin_covariance_and_correlation(self, Nvar: int):
+    def visualize_bin_covariance_and_correlation(self):
 
         fig, ax = create_double_figure()
 
-        plot_matrix_on_axis(
-            ax[0],
-            self.get_bin_covariance(Nvar),
-            np.arange(self._get_number_of_bins()),
-            "Covariance matrix",
-            "bins",
+        sns.heatmap(
+            self.get_bin_covariance(),
+            annot=True,
+            ax=ax[0],
+            fmt=".2f",
+            cbar_kws={"label": "Covariance"},
+            cmap="Blues",
+            norm=LogNorm(),
+            vmin=0.0001,
+            vmax=100,
         )
 
-        plot_matrix_on_axis(
-            ax[1],
-            self.get_bin_correlation(Nvar),
-            np.arange(self._get_number_of_bins()),
-            "Correlation matrix",
-            "bins",
+        sns.heatmap(
+            self.get_bin_correlation(),
+            annot=True,
+            ax=ax[1],
+            cbar_kws={"label": "Pearson coeff."},
+            cmap="Blues",
+            vmin=0,
+            vmax=1,
         )
 
         return fig, ax
@@ -183,9 +207,15 @@ class Template1D(Template):
 
 class Template2D(Template):
     def __init__(
-        self, df: DataFrame, binning: dict, total_weight: str, syst_weight: str
+        self,
+        df: DataFrame,
+        binning: dict,
+        total_weight: str,
+        syst_weight: str,
+        correction: Correction,
+        variator: Variator,
     ):
-        super.__init__(df, binning, total_weight, syst_weight)
+        super().__init__(df, binning, total_weight, syst_weight, correction, variator)
 
         self.nom_hist = self.make_hist()
 
@@ -198,7 +228,7 @@ class Template2D(Template):
             # Divide with the nominal systematic weight and multiply with the varied one
             weights = np.array(
                 (self.df[self.total_weight] / self.df[self.syst_weight])
-                / self.df[f"{self.syst_weight}_var_{index}"]
+                * self.df[f"{self.syst_weight}_var_{index}"]
             )
 
         return np.histogramdd(
