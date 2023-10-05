@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Union
+from typing import Iterable, Union, List
 
 import numpy as np
 
@@ -10,7 +10,6 @@ from sysvar.visualize import (
     create_double_figure,
     create_single_figure,
 )
-from sysvar.corrections import Correction
 
 
 class NotAnArrayError(Exception):
@@ -18,10 +17,6 @@ class NotAnArrayError(Exception):
 
 
 class MultiDimArrayError(Exception):
-    pass
-
-
-class NonMatchingCorrections(Exception):
     pass
 
 
@@ -40,7 +35,7 @@ class Uncertainty(ABC):
 
     """
 
-    def __init__(self, correction: Correction, name: str, errors: np.ndarray):
+    def __init__(self, name: str, errors: np.ndarray, string_boundaries: List):
         """
         Initialize an Uncertainty instance with a name and error values.
 
@@ -55,10 +50,10 @@ class Uncertainty(ABC):
                are unequal.
 
         """
-        self.correction = correction
         self.name = name
         if self._is_valid_input_errors(errors):
             self.errors = errors
+        self.string_boundaries = string_boundaries
         self.cov_matrix = self.build_covariance()
         super().__init__()
 
@@ -95,11 +90,6 @@ class Uncertainty(ABC):
 
         elif errors.ndim > 1:
             raise MultiDimArrayError("The errors must be provided as a 1D array")
-
-        elif len(errors) != len(self.correction.values):
-            raise NonMatchingCorrections(
-                f"The corrections have length of {len(self.correction.values)}, but you are trying to pass uncertainties of length {len(errors)}."
-            )
         else:
             return True
 
@@ -110,7 +100,7 @@ class Uncertainty(ABC):
         plot_matrix_on_axis(
             ax,
             self.cov_matrix,
-            self.correction.strings,
+            self.string_boundaries,
             f"{self.name} Covariance matrix",
             "Correction bins",
         )
@@ -124,7 +114,7 @@ class Uncertainty(ABC):
         plot_matrix_on_axis(
             ax[0],
             self.cov_matrix,
-            self.correction.strings,
+            self.string_boundaries,
             f"{self.name} Covariance matrix",
             "Correction bins",
         )
@@ -132,7 +122,7 @@ class Uncertainty(ABC):
         plot_matrix_on_axis(
             ax[1],
             self.corr_matrix,
-            self.correction.strings,
+            self.string_boundaries,
             f"{self.name} Correlation matrix",
             "Correction bins",
         )
@@ -159,7 +149,7 @@ class FullyCorrelatedUncertainty(Uncertainty):
 
     """
 
-    def __init__(self, correction: Correction, name: str, errors: Iterable):
+    def __init__(self, name: str, errors: Iterable, string_boundaries: List):
         """
         Initialize a FullyCorrelatedUncertainty instance with a name and error values.
 
@@ -169,7 +159,7 @@ class FullyCorrelatedUncertainty(Uncertainty):
 
         """
         self.corr_matrix = np.ones((len(errors), len(errors)))
-        super().__init__(correction, name, np.array(errors))
+        super().__init__(name, np.array(errors), string_boundaries)
 
     def build_covariance(self) -> np.ndarray:
         """
@@ -201,7 +191,7 @@ class UncorrelatedUncertainty(Uncertainty):
 
     """
 
-    def __init__(self, correction: Correction, name: str, errors: Iterable):
+    def __init__(self, name: str, errors: Iterable, string_boundaries: List):
         """
         Initialize an UncorrelatedUncertainty instance with a name and error values.
 
@@ -211,7 +201,7 @@ class UncorrelatedUncertainty(Uncertainty):
 
         """
         self.corr_matrix = np.identity(len(errors))
-        super().__init__(correction, name, np.array(errors))
+        super().__init__(name, np.array(errors), string_boundaries)
 
     def build_covariance(self) -> np.ndarray:
         """

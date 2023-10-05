@@ -4,7 +4,6 @@ from typing import Iterable, Union
 
 import numpy as np
 
-from sysvar.uncertainties import Uncertainty
 from sysvar.corrections import Correction
 from sysvar.visualize import (
     plot_matrix_on_axis,
@@ -13,17 +12,11 @@ from sysvar.visualize import (
     create_single_figure,
 )
 
-
-class UncertaintyWithSameNameExists(Exception):
-    pass
-
-
 # TODO should this really be an ABC ? Need to think about it...
 class Variator(ABC):
 
     """
     Abstract base class for generating variations on a correction.
-    Uncertainty objects need to be appended to the variator.
     Then the variator will create a big covariance matrix of all the uncertainties.
     Through the get_variations_from_uncertainty method, one can examine the effect
     of the variations coming from a specific uncertainty.
@@ -49,31 +42,12 @@ class Variator(ABC):
         """
 
         self.correction = correction
-        self.uncertainties = {}
+        self.uncertainties = self.correction.uncertainties
         self.Nvar = Nvar
 
     @property
     def variations(self) -> np.ndarray:
         return self.get_correction_variations()
-
-    def add_uncertainty(self, unc: Uncertainty) -> None:
-
-        """
-        Add an uncertainty to the Variator.
-
-        Args:
-            unc (Uncertainty): The uncertainty to be added.
-
-        Raises:
-            UncertaintyWithSameNameExists: If uncertainty with the same name has already been added to the variator.
-
-        """
-        if unc.name in self.uncertainties.keys():
-            raise UncertaintyWithSameNameExists(
-                f"An uncertainty with the name {unc.name} already exist in the set of uncertainties that the variator will consider. Make sure that you add a specific uncertainty only once, and that there are no duplicate names"
-            )
-        else:
-            self.uncertainties.update({unc.name: unc})
 
     def _build_total_covariance(self) -> np.ndarray:
 
