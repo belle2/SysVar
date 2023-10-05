@@ -91,7 +91,7 @@ class Correction:
     def add_uncertainty(self, unc: Uncertainty) -> None:
 
         """
-        Add an uncertainty to the Variator.
+        Add an uncertainty to the Correction.
 
         Args:
             unc (Uncertainty): The uncertainty to be added.
