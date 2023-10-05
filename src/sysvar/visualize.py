@@ -58,7 +58,7 @@ def plot_variation_on_axis(
         linestyle = "dashed"
     else:
         label = f"variation {index}"
-        color = (PALETTE[index],)
+        color = PALETTE[index]
         linestyle = "solid"
 
-    ax.steps(x, variation, label=label, color=color, linestyle=linestyle)
+    ax.step(x, variation, label=label, color=color, linestyle=linestyle)
