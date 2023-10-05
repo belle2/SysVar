@@ -34,7 +34,7 @@ class Correction:
     def __post_init__(self):
         if self.custom:
             # If this is a custom correction populate the fields from arguments
-            self.values = np.array(self.centra_values)
+            self.central_values = np.array(self.central_values)
             self.lower_bounds = np.array(self.lower_bounds)
             self.upper_bounds = np.array(self.upper_bounds)
         else:
@@ -46,7 +46,7 @@ class Correction:
                     "Need to specify the systematic effect and the MC production in the positional arguments"
                 )
 
-            self.values = info["correction"]
+            self.central_values = info["correction"]
             self.lower_bounds = info["min"]
             self.upper_bounds = info["max"]
             # Add the fully correlated uncertainties
