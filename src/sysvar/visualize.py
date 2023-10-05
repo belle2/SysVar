@@ -17,6 +17,10 @@ def create_double_figure():
     return plt.subplots(1, 2, figsize=(16, 4.5), dpi=800)
 
 
+def create_triple_figure():
+    return plt.subplots(1, 3, figsize=(16, 4.5), dpi=800)
+
+
 def plot_matrix_on_axis(ax, matrix, tick_labels, title, axes_labels):
 
     sns.heatmap(matrix, annot=True, cmap="Blues", ax=ax)
@@ -75,3 +79,12 @@ def plot_variation_on_axis(
         raise ValueError(
             f"plot_func argument should be either 'step' or 'stairs' but you passed {plot_func}"
         )
+
+
+def plot_gaussian_variation_on_axis(
+    ax: Axes, mean: float, variations: np.ndarray, string: str
+):
+    ax.hist(variations, color="black", histtype="step")
+    ax.axvline(mean, color="brown")
+    ax.annotate(f"{len(variations)} variations", (0.69, 0.9), xycoords="axes fraction")
+    ax.annotate(string, (0.69, 0.85), xycoords="axes fraction")

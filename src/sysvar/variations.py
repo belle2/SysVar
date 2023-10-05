@@ -8,8 +8,10 @@ from sysvar.corrections import Correction
 from sysvar.visualize import (
     plot_matrix_on_axis,
     plot_variation_on_axis,
-    create_double_figure,
+    plot_gaussian_variation_on_axis,
     create_single_figure,
+    create_double_figure,
+    create_triple_figure,
 )
 
 # TODO should this really be an ABC ? Need to think about it...
@@ -148,4 +150,19 @@ class Variator(ABC):
                 plot_func="stairs",
             )
 
+        return fig, ax
+
+    def visualize_gaussian_variations(self):
+
+        if len(self.correction.values) == 3:
+            fig, ax = create_triple_figure()
+        else:
+            raise NotImplementedError(
+                "Need to figure out how to deal with multiple number of figures"
+            )
+
+        for i, c in enumerate(self.correction.values):
+            plot_gaussian_variation_on_axis(
+                ax[i], c, self.variations[:, i], self.correction.strings[i]
+            )
         return fig, ax
