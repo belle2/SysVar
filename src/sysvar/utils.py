@@ -1,9 +1,13 @@
 from os import path
 from pathlib import Path
 from yaml import safe_load
+from typing import List
+
+from pandas import DataFrame
 
 # This return [/*****/Sysvar/src/sysvar]
 from sysvar import __path__
+from sysvar.corrections import Correction
 
 import logging
 
@@ -75,7 +79,9 @@ def _get_config_file_name(cfg_name: str) -> str:
     return ".".join((cfg_name, "yaml"))
 
 
-def add_weights_to_dataframe(df, correction, weightname, overwrite=False):
+def add_weights_to_dataframe(
+    df: DataFrame, correction: Correction, weightname: str, overwrite: bool = False
+):
 
     """
     Add weights to a DataFrame based on a correction object.
@@ -99,16 +105,33 @@ def add_weights_to_dataframe(df, correction, weightname, overwrite=False):
             df.loc[mask, weightname] = v
 
     if weightname in df.columns and overwrite:
-        logging.info("%s exists but it will be overriden", weightname)
+        logging.info("%s exists but it will be overwriten", weightname)
 
         _add_weights(df, correction, weightname)
 
     elif weightname in df.columns and not overwrite:
 
         logging.warning(
-            "%s exists but it not will be overriden. Skipping. No weights are added",
+            "%s exists but it not will be ovewritten. Skipping. No weights are added. If you want to change this behaviour set the overwrite argument to True",
             weightname,
         )
     elif weightname not in df.columns:
         logging.info("%s does not exist. Adding it to dataframe", weightname)
         _add_weights(df, correction, weightname)
+
+
+def combine_weights(
+    df: DataFrame, new_weight: str, weights: List[str], overwrite: bool = False
+):
+
+    if new_weight in df.columns and overwrite:
+        logging.info("%s exists but it will be overwritten", new_weight)
+        df.loc[:, new_weight] = df[weights].prod(axis=1)
+
+    elif new_weight in df.columns and not overwrite:
+        logging.warning(
+            "%s exists but it not will be ovewritten. Skipping. No weights are combined If you want to change this behaviour set the overwrite argument to True",
+            new_weight,
+        )
+    elif new_weight not in df.columns:
+        logging.info("%s does not exist. Adding it to dataframe", new_weight)
