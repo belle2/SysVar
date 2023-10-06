@@ -5,6 +5,13 @@ from yaml import safe_load
 # This return [/*****/Sysvar/src/sysvar]
 from sysvar import __path__
 
+import logging
+
+logging.basicConfig(
+    format="%(levelname)s : %(funcName)s: %(lineno)d :  %(message)s",
+    level=logging.INFO,
+)
+
 
 def read_yaml(cfg_name: str, deeper_dir: str = ""):
     """Reads a yaml file file from the configuration directory of the repository and
@@ -66,3 +73,42 @@ def _get_config_file_name(cfg_name: str) -> str:
     The name of the config file with the added .yaml extension
     """
     return ".".join((cfg_name, "yaml"))
+
+
+def add_weights_to_dataframe(df, correction, weightname, overwrite=False):
+
+    """
+    Add weights to a DataFrame based on a correction object.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to which weights should be added.
+        correction: The correction object containing central values and queries.
+        weightname (str): The name of the weight column to add.
+        overwrite (bool, optional): Whether to overwrite the weight column if it already exists.
+
+    Returns:
+        None
+
+    """
+
+    def _add_weights(df, correction, weightname):
+
+        df.loc[:, weightname] = 1
+        for v, q in zip(correction.central_values, correction.queries):
+            mask = df.eval(q)
+            df.loc[mask, weightname] = v
+
+    if weightname in df.columns and overwrite:
+        logging.info("%s exists but it will be overriden", weightname)
+
+        _add_weights(df, correction, weightname)
+
+    elif weightname in df.columns and not overwrite:
+
+        logging.warning(
+            "%s exists but it not will be overriden. Skipping. No weights are added",
+            weightname,
+        )
+    elif weightname not in df.columns:
+        logging.info("%s does not exist. Adding it to dataframe", weightname)
+        _add_weights(df, correction, weightname)
