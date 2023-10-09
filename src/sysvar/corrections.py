@@ -96,6 +96,12 @@ class Correction:
             f"[ {low} - {up} ]" for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
 
+    @property
+    def total_error(self) -> np.ndarray:
+        return np.sqrt(
+            np.sum([np.power(x.errors, 2) for x in self.uncertainties.values()], axis=0)
+        )
+
     def add_uncertainty(self, unc: Uncertainty) -> None:
 
         """
