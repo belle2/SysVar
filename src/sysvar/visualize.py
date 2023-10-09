@@ -104,3 +104,34 @@ def plot_gaussian_variation_on_axis(
     # Add some annotations
     ax.annotate(f"{len(variations)} variations", (0.69, 0.9), xycoords="axes fraction")
     ax.annotate(string, (0.69, 0.85), xycoords="axes fraction")
+
+
+def plot_error_comparison_in_axis(ax: Axes, correction):
+
+    ax.errorbar(
+        correction.central_values,
+        np.arange(len(correction.central_values)),
+        xerr=correction.total_error,
+        linestyle="",
+        marker="o",
+        color="black",
+        label="central value w/ total unc.",
+        capsize=5,
+    )
+
+    for i, (n, u) in enumerate(reversed(correction.uncertainties.items())):
+        ax.errorbar(
+            correction.central_values,
+            np.arange(len(u.errors)) + (i + 1) * 0.1,
+            xerr=u.errors,
+            label=n,
+            linestyle="",
+            capsize=5,
+            color=PALETTE[i],
+        )
+
+    ax.set_yticks(np.arange(len(correction.central_values)), correction.strings)
+    ax.set_xlabel("correction weight")
+    plt.legend(bbox_to_anchor=(1, 0.7))
+
+    return
