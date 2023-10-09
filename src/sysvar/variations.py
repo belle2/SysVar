@@ -51,6 +51,15 @@ class Variator(ABC):
     def variations(self) -> np.ndarray:
         return self.get_correction_variations()
 
+    @property
+    def cov_matrix(self) -> np.ndarray:
+        return self._build_total_covariance()
+
+    @property
+    def corr_matrix(self) -> np.ndarray:
+        D = 1 / np.sqrt(np.diag(self.cov_matrix))  # takes the inverse of sqrt of diag.
+        return D * self.cov_matrix * D
+
     def _build_total_covariance(self) -> np.ndarray:
 
         """
@@ -165,4 +174,40 @@ class Variator(ABC):
             plot_gaussian_variation_on_axis(
                 ax[i], c, self.variations[:, i], self.correction.strings[i]
             )
+        return fig, ax
+
+    def visualize_covariance(self):
+
+        fig, ax = create_single_figure()
+
+        plot_matrix_on_axis(
+            ax,
+            self.cov_matrix,
+            self.correction.string_boundaries,
+            "Covariance matrix",
+            "Correction bins",
+        )
+
+        return fig, ax
+
+    def visualize_covariance_and_correlation(self):
+
+        fig, ax = create_double_figure()
+
+        plot_matrix_on_axis(
+            ax[0],
+            self.cov_matrix,
+            self.correction.strings,
+            "Covariance matrix",
+            "Correction bins",
+        )
+
+        plot_matrix_on_axis(
+            ax[1],
+            self.corr_matrix,
+            self.correction.strings,
+            "Correlation matrix",
+            "Correction bins",
+        )
+
         return fig, ax
