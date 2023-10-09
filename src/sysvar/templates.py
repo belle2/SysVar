@@ -253,3 +253,5 @@ class Template2D(Template):
         ax.set_ylabel("Template relative variation")
         ax.set_xlabel("Fitting variable")
         ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+
+        return fig, ax
