@@ -115,12 +115,27 @@ class Template(ABC):
 
     def add_variations(self):
 
+        # Initialize the nominal up and down variations
+        self.df.loc[:, f"{self.syst_weight}_up"] = 1
+        self.df.loc[:, f"{self.syst_weight}_down"] = 1
+
         # Initialize the variations
         self.df.loc[:, [f"{self.syst_weight}_var_{i}" for i in range(self.Nvar)]] = 1
 
-        for i, q in enumerate(self.correction.queries):
+        for i, (q, te) in enumerate(
+            zip(self.correction.queries, self.correction.total_error)
+        ):
             # Now add the variations of the corrections to the dataframe entries that
             # pass the cuts
+
+            self.df.loc[self.df.eval(q), f"{self.syst_weight}_up"] = (
+                self.df.syst_weight + te
+            )
+
+            self.df.loc[self.df.eval(q), f"{self.syst_weight}_down"] = (
+                self.df.syst_weight - te
+            )
+
             self.df.loc[
                 self.df.eval(q),
                 [f"{self.syst_weight}_var_{j}" for j in range(self.Nvar)],
