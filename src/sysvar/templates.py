@@ -237,6 +237,22 @@ class Template2D(Template):
             weights=weights,
         )
 
+    def visualize_nominal_template(self):
+
+        fig, ax = create_single_figure()
+
+        plot_variation_on_axis(
+            ax,
+            np.linspace(0, 1, self._get_number_of_bins() + 1),
+            self.nom_hist[0].flatten(),
+            plot_func="stairs",
+        )
+
+        ax.set_ylabel("Events / bin")
+        ax.set_xlabel("Fitting variable")
+
+        return fig, ax
+
     def visualize_variations(self, Nvar: int = 5):
 
         fig, ax = create_single_figure()
@@ -245,10 +261,12 @@ class Template2D(Template):
 
             v_hist = self.make_hist(index=i)
 
-            bin_edges = [b for b in self.binning.values()]
-            x = np.linspace(0, 1, (bin_edges[0] - 1) * (bin_edges[1] - 1))
+            bin_edges = [np.array(b) for b in self.binning.values()]
+            x = np.linspace(0, 1, self._get_number_of_bins())
 
-            plot_variation_on_axis(ax, x, v_hist / self.nom_hist, i)
+            plot_variation_on_axis(
+                ax, x, v_hist[0].flatten() / self.nom_hist[0].flatten(), i
+            )
 
         ax.set_ylabel("Template relative variation")
         ax.set_xlabel("Fitting variable")
