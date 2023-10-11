@@ -23,7 +23,7 @@ def create_triple_figure():
 
 def plot_matrix_on_axis(ax, matrix, tick_labels, title, axes_labels):
 
-    sns.heatmap(matrix, annot=True, cmap="Blues", ax=ax)
+    sns.heatmap(matrix, annot=True, cmap="Blues", ax=ax, vmin=0, vmax=1)
 
     ax.set_xticks(np.arange(len(tick_labels)) + 0.5, tick_labels)
     ax.set_yticks(np.arange(len(tick_labels)) + 0.5, tick_labels)
