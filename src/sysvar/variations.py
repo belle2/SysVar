@@ -57,8 +57,8 @@ class Variator(ABC):
 
     @property
     def corr_matrix(self) -> np.ndarray:
-        D = 1 / np.sqrt(np.diag(self.cov_matrix))  # takes the inverse of sqrt of diag.
-        return D * self.cov_matrix * D
+        std_devs = np.sqrt(np.diag(self.cov_matrix))
+        return self.cov_matrix / np.outer(std_devs, std_devs)
 
     def _build_total_covariance(self) -> np.ndarray:
 
