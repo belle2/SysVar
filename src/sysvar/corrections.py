@@ -76,6 +76,10 @@ class Correction:
                 )
 
     @property
+    def N(self) -> int:
+        return len(self.central_values)
+
+    @property
     def value_edges(self) -> np.ndarray:
         return np.unique(np.concatenate((self.lower_bounds, self.upper_bounds)))
 
