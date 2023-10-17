@@ -5,16 +5,7 @@ from typing import Union
 
 import numpy as np
 from pandas import DataFrame
-import seaborn as sns
-from matplotlib.colors import LogNorm
 
-from sysvar.visualize import (
-    plot_matrix_on_axis,
-    plot_variation_on_axis,
-    create_double_figure,
-    create_single_figure,
-    create_triple_figure,
-)
 from sysvar.corrections import Correction
 from sysvar.variations import Variator
 
@@ -60,6 +51,18 @@ class Template(ABC):
         self.correction = correction
         self.variations = variator.variations
         self.Nvar = variator.Nvar
+
+    @property
+    def cov_matrix(self) -> np.ndarray:
+        return np.cov(self._get_absolute_variations())
+
+    @property
+    def corr_matrix(self) -> np.ndarray:
+        return np.corrcoef(self._get_absolute_variations())
+
+    @property
+    def Nbins(self) -> int:
+        return np.prod([len(bins) - 1 for bins in self.binning.values()])
 
     def _is_correct_binning(self, columns: list, binning: dict) -> bool:
 
@@ -107,9 +110,6 @@ class Template(ABC):
 
         return True
 
-    def _get_number_of_bins(self):
-        return np.prod([len(bins) - 1 for bins in self.binning.values()])
-
     @abstractmethod
     def make_hist(self, index: Union[None, int] = None) -> np.ndarray:
         pass
@@ -143,89 +143,11 @@ class Template(ABC):
             ] = self.variations[:, i]
 
     def _get_absolute_variations(self):
-        absolute_variations = np.empty((self._get_number_of_bins(), self.Nvar))
+        absolute_variations = np.empty((self.Nbins, self.Nvar))
         for i in range(self.Nvar):
             absolute_variations[:, i] = self.make_hist(i)[0].flatten()
 
         return absolute_variations
-
-    def get_bin_covariance(self) -> np.ndarray:
-
-        return np.cov(self._get_absolute_variations())
-
-    def get_bin_correlation(self) -> np.ndarray:
-
-        return np.corrcoef(self._get_absolute_variations())
-
-    def visualize_bin_covariance(self):
-
-        fig, ax = create_single_figure()
-
-        plot_matrix_on_axis(
-            ax,
-            self.get_bin_covariance(),
-            np.arange(self._get_number_of_bins()),
-            "Covariance matrix",
-            "bins",
-        )
-
-        return fig, ax
-
-    def visualize_bin_correlation(self):
-
-        fig, ax = create_single_figure()
-
-        plot_matrix_on_axis(
-            ax,
-            self.get_bin_correlation(),
-            np.arange(self._get_number_of_bins()),
-            "Correlation matrix",
-            "bins",
-        )
-
-        return fig, ax
-
-    def visualize_bin_correlation(self):
-
-        fig, ax = create_single_figure()
-
-        plot_matrix_on_axis(
-            ax,
-            self.get_bin_correlation(),
-            np.arange(self._get_number_of_bins()),
-            "Correlation matrix",
-            "bins",
-        )
-
-        return fig, ax
-
-    def visualize_bin_covariance_and_correlation(self):
-
-        fig, ax = create_double_figure()
-
-        sns.heatmap(
-            self.get_bin_covariance(),
-            annot=True,
-            ax=ax[0],
-            fmt=".2f",
-            cbar_kws={"label": "Covariance"},
-            cmap="Blues",
-            norm=LogNorm(),
-            vmin=0.0001,
-            vmax=100,
-        )
-
-        sns.heatmap(
-            self.get_bin_correlation(),
-            annot=True,
-            ax=ax[1],
-            cbar_kws={"label": "Pearson coeff."},
-            cmap="Blues",
-            vmin=0,
-            vmax=1,
-        )
-
-        return fig, ax
 
 
 class Template1D(Template):
@@ -270,181 +192,3 @@ class Template2D(Template):
             bins=[bins for bins in self.binning.values()],
             weights=weights,
         )
-
-    def visualize_nominal_template(self):
-
-        fig, ax = create_single_figure()
-
-        plot_variation_on_axis(
-            ax,
-            np.linspace(0, 1, self._get_number_of_bins() + 1),
-            self.nom_hist[0].flatten(),
-            plot_func="stairs",
-        )
-
-        ax.set_ylabel("Events / bin")
-        ax.set_xlabel("Fitting variable")
-
-        return fig, ax
-
-    def visualize_variations(self, Nvar: int = 5):
-
-        fig, ax = create_single_figure()
-
-        for i in range(Nvar):
-
-            v_hist = self.make_hist(index=i)
-
-            bin_edges = [np.array(b) for b in self.binning.values()]
-            x = np.linspace(0, 1, self._get_number_of_bins())
-
-            plot_variation_on_axis(
-                ax, x, v_hist[0].flatten() / self.nom_hist[0].flatten(), i
-            )
-
-        ax.set_ylabel("Template relative variation")
-        ax.set_xlabel("Fitting variable")
-        ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
-
-        return fig, ax
-
-    def visualize_up_and_down_variations(self):
-
-        fig, ax = create_single_figure()
-
-        x = np.linspace(0, 1, self._get_number_of_bins())
-
-        h_up = self.make_hist("up")
-        h_down = self.make_hist("down")
-
-        ax.axhline(y=1, color="black")
-
-        # TODO move these to the visualizer
-        import seaborn as sns
-
-        PALETTE = sns.color_palette("colorblind")
-
-        ax.step(
-            x,
-            h_up[0].flatten() / self.nom_hist[0].flatten(),
-            color=PALETTE[0],
-            label="Up variation",
-            linestyle="dashed",
-        )
-
-        ax.step(
-            x,
-            h_down[0].flatten() / self.nom_hist[0].flatten(),
-            color=PALETTE[2],
-            label="Down variation",
-            linestyle="dashed",
-        )
-
-        ax.fill_between(
-            x,
-            1 - np.sqrt(self.nom_hist[0].flatten()) / self.nom_hist[0].flatten(),
-            1 + np.sqrt(self.nom_hist[0].flatten()) / self.nom_hist[0].flatten(),
-            color="grey",
-            alpha=0.25,
-            label="Stat error",
-        )
-
-        ax.set_ylabel("Template relative variation")
-        ax.set_xlabel("Fitting variable")
-        ax.legend()
-
-        return fig, ax
-
-    def visualize_overview(self):
-
-        import matplotlib as mpl
-        import matplotlib.pyplot as plt
-
-        # gridspec inside gridspec
-        fig = plt.figure(figsize=(16, 10), dpi=800)
-
-        gs = mpl.gridspec.GridSpec(2, 6, wspace=0.4, hspace=0.15)
-        ax0 = fig.add_subplot(gs[0, 1:5])
-        ax1 = fig.add_subplot(gs[1, :3])
-        gs_low = gs[1, 3:].subgridspec(2, 1, height_ratios=[3.5, 1], hspace=0.1)
-
-        ax2 = fig.add_subplot(gs_low[0, 0])
-        ax2.set_xticks([])
-        ax3 = fig.add_subplot(gs_low[1, 0])
-
-        plot_matrix_on_axis(
-            ax0,
-            self.get_bin_correlation(),
-            np.arange(self._get_number_of_bins()),
-            "Correlation matrix",
-            "bins",
-        )
-
-        plot_variation_on_axis(
-            ax1,
-            np.linspace(0, 1, self._get_number_of_bins() + 1),
-            self.nom_hist[0].flatten(),
-            plot_func="stairs",
-        )
-        ax1.set_ylabel("Events / bin")
-        ax1.set_xlabel("Fitting variable")
-
-        x = np.linspace(0, 1, self._get_number_of_bins())
-
-        h_up = self.make_hist("up")
-        h_down = self.make_hist("down")
-
-        ax2.axhline(y=1, color="black")
-
-        # TODO move these to the visualizer
-        import seaborn as sns
-
-        PALETTE = sns.color_palette("colorblind")
-
-        ax2.step(
-            x,
-            h_up[0].flatten() / self.nom_hist[0].flatten(),
-            color=PALETTE[0],
-            label="Up variation",
-            linestyle="dashed",
-        )
-
-        ax2.step(
-            x,
-            h_down[0].flatten() / self.nom_hist[0].flatten(),
-            color=PALETTE[2],
-            label="Down variation",
-            linestyle="dashed",
-        )
-
-        ax2.fill_between(
-            x,
-            1 - np.sqrt(self.nom_hist[0].flatten()) / self.nom_hist[0].flatten(),
-            1 + np.sqrt(self.nom_hist[0].flatten()) / self.nom_hist[0].flatten(),
-            color="grey",
-            alpha=0.25,
-            label="Stat error",
-        )
-
-        ax2.set_ylabel("Template relative variation")
-
-        ax2.legend()
-
-        ax3.plot(
-            x,
-            (h_up[0].flatten() - self.nom_hist[0].flatten())
-            / (np.sqrt(self.nom_hist[0].flatten())),
-            linestyle="",
-            marker=".",
-            color="black",
-        )
-
-        ax3.fill_between(x=x, y1=10e-3, y2=10e-2, color=PALETTE[0], alpha=0.75)
-        ax3.fill_between(x=x, y1=10e-2, y2=10e-1, color=PALETTE[3], alpha=0.75)
-
-        ax3.set_ylabel("variation/stat error")
-        ax3.set_xlabel("Fitting variable")
-        ax3.set_ylim(0.01, 1)
-        ax3.set_yscale("log")
-
-        return fig, (ax0, ax1, ax2, ax3)

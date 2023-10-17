@@ -5,12 +5,6 @@ from typing import Iterable, Union, List
 
 import numpy as np
 
-from sysvar.visualize import (
-    plot_matrix_on_axis,
-    create_double_figure,
-    create_single_figure,
-)
-
 
 class NotAnArrayError(Exception):
     pass
@@ -92,42 +86,6 @@ class Uncertainty(ABC):
             raise MultiDimArrayError("The errors must be provided as a 1D array")
         else:
             return True
-
-    def visualize_covariance(self):
-
-        fig, ax = create_single_figure()
-
-        plot_matrix_on_axis(
-            ax,
-            self.cov_matrix,
-            self.string_boundaries,
-            f"{self.name} Covariance matrix",
-            "Correction bins",
-        )
-
-        return fig, ax
-
-    def visualize_covariance_and_correlation(self):
-
-        fig, ax = create_double_figure()
-
-        plot_matrix_on_axis(
-            ax[0],
-            self.cov_matrix,
-            self.string_boundaries,
-            f"{self.name} Covariance matrix",
-            "Correction bins",
-        )
-
-        plot_matrix_on_axis(
-            ax[1],
-            self.corr_matrix,
-            self.string_boundaries,
-            f"{self.name} Correlation matrix",
-            "Correction bins",
-        )
-
-        return fig, ax
 
 
 class FullyCorrelatedUncertainty(Uncertainty):
