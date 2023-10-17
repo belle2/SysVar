@@ -14,23 +14,13 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.colors import LogNorm
 
+from sysvar.corrections import Correction
 from sysvar.uncertainties import Uncertainty
 from sysvar.variations import Variator
-from sysvar.corrections import Correction
+from sysvar.templates import Template
+
 
 PALETTE = sns.color_palette("colorblind")
-
-
-def create_single_figure():
-    return plt.subplots(figsize=(8, 5), dpi=800)
-
-
-def create_double_figure():
-    return plt.subplots(1, 2, figsize=(16, 4.5), dpi=800)
-
-
-def create_triple_figure():
-    return plt.subplots(1, 3, figsize=(16, 4.5), dpi=800)
 
 
 class Visualizer(ABC):
@@ -47,48 +37,21 @@ class Visualizer(ABC):
         # Get the save dir. By default this is today's date
         self.save_dir = self._get_save_dir(dir_spec)
         self.extensions = self._get_extensions(extra_ext)
+        super().__init__()
 
     @abstractmethod
     def annotate_matrix_plot(self, ax: Axes):
         pass
 
-    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+    @abstractmethod
+    def plot_cov_matrix(self):
+        pass
 
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+    @abstractmethod
+    def plot_corr_matrix(self):
+        pass
 
-        sns.heatmap(
-            self.instance.cov_matrix,
-            ax=ax,
-            fmt=".2f",
-            cbar_kws={"label": "Covariance"},
-            cmap="Blues",
-            norm=LogNorm(),
-            vmin=0.0001,
-            vmax=100,
-        )
-        ax.set_title("Covariance matrix")
-
-        return ax
-
-    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
-
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
-
-        sns.heatmap(
-            self.instance.cov_matrix,
-            ax=ax,
-            cbar_kws={"label": "Pearson coeff."},
-            cmap="Blues",
-            vmin=0,
-            vmax=1,
-        )
-        ax.set_title("Correlation matrix")
-
-        return ax
-
-    def plot_cov_and_corr(self, ax: np.ndarray):
+    def plot_cov_and_corr(self):
 
         fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=800)
 
@@ -164,52 +127,6 @@ class Visualizer(ABC):
 
         return path.join(top_dir, dir_name)
 
-
-class CorrectionVisualizer(Visualizer):
-    def __init__(
-        self,
-        instance: Correction,
-        namespace: list,
-        dir_spec: Union[str, None] = None,
-        extra_ext: Union[str, Iterable, None] = None,
-    ):
-        super().__init__(instance, namespace, dir_spec, extra_ext)
-
-    def plot_error_comparison_in_axis(self):
-
-        fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
-
-        # Plot the central values of the correction
-        ax.errorbar(
-            self.instance.central_values,
-            np.arange(len(self.instance.central_values)),
-            xerr=self.instance.total_error,
-            linestyle="",
-            marker="o",
-            color="black",
-            label="central value w/ total unc.",
-            capsize=5,
-        )
-
-        for i, (n, u) in enumerate(reversed(self.instance.uncertainties.items())):
-            ax.errorbar(
-                self.instance.central_values,
-                np.arange(len(u.errors)) + (i + 1) * 0.1,
-                xerr=u.errors,
-                label=n,
-                linestyle="",
-                capsize=5,
-                color=PALETTE[i],
-            )
-
-        ax.set_yticks(
-            np.arange(len(self.instance.central_values)), self.instance.strings
-        )
-        ax.set_xlabel("Correction weight")
-        plt.legend(bbox_to_anchor=(1, 0.7))
-
-        return
-
     @staticmethod
     def plot_variation_on_axis(
         ax: Axes,
@@ -258,6 +175,71 @@ class CorrectionVisualizer(Visualizer):
             )
 
 
+class NoMatrixError(Exception):
+    pass
+
+
+class CorrectionVisualizer(Visualizer):
+    def __init__(
+        self,
+        instance: Correction,
+        namespace: list,
+        dir_spec: Union[str, None] = None,
+        extra_ext: Union[str, Iterable, None] = None,
+    ):
+        super().__init__(instance, namespace, dir_spec, extra_ext)
+
+    def annotate_matrix_plot(self, ax: Axes):
+        raise NoMatrixError(
+            "The Correction object does not have a covariance nor a correlation matrix. This is normal! Don't try to call this method on this class"
+        )
+
+    def plot_cov_matrix(self):
+        raise NoMatrixError(
+            "The Correction object does not have a covariance nor a correlation matrix. This is normal! Don't try to call this method on this class"
+        )
+
+    def plot_corr_matrix(self):
+        raise NoMatrixError(
+            "The Correction object does not have a covariance nor a correlation matrix. This is normal! Don't try to call this method on this class"
+        )
+
+    def plot_error_comparison(self):
+
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        # Plot the central values of the correction
+        ax.errorbar(
+            self.instance.central_values,
+            np.arange(len(self.instance.central_values)),
+            xerr=self.instance.total_error,
+            linestyle="",
+            marker="o",
+            color="black",
+            label="central value w/ total unc.",
+            capsize=5,
+        )
+
+        for i, (n, u) in enumerate(reversed(self.instance.uncertainties.items())):
+            ax.errorbar(
+                self.instance.central_values,
+                np.arange(len(u.errors)) + (i + 1) * 0.1,
+                xerr=u.errors,
+                label=n,
+                linestyle="",
+                capsize=5,
+                color=PALETTE[i],
+            )
+
+        ax.set_yticks(
+            np.arange(len(self.instance.central_values)), self.instance.strings
+        )
+        ax.set_xlabel("Correction weight")
+        plt.legend(bbox_to_anchor=(1, 0.7))
+
+        return
+
+
 class UncertaintyVisualizer(Visualizer):
     def __init__(
         self,
@@ -290,6 +272,40 @@ class UncertaintyVisualizer(Visualizer):
             self.instance.string_boundaries,
         )
 
+    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.cov_matrix,
+            ax=ax,
+            annot=True,
+            cbar_kws={"label": "Covariance"},
+            cmap="Blues",
+        )
+        ax.set_title("Covariance matrix")
+
+        return ax
+
+    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.corr_matrix,
+            ax=ax,
+            annot=True,
+            cbar_kws={"label": "Pearson coeff."},
+            cmap="Blues",
+            vmin=0,
+            vmax=1,
+        )
+        ax.set_title("Correlation matrix")
+
+        return ax
+
 
 class VariationVisualizer(Visualizer):
     def __init__(
@@ -300,6 +316,62 @@ class VariationVisualizer(Visualizer):
         extra_ext: Union[str, Iterable, None] = None,
     ):
         super().__init__(instance, namespace, dir_spec, extra_ext)
+
+    def annotate_matrix_plot(self, ax: Axes):
+
+        if isinstance(ax, Axes):
+            self._annotate_axis(ax)
+        elif isinstance(ax, np.ndarray):
+            for axis in ax:
+                self._annotate_axis(ax)
+
+    def _annotate_axis(self, ax):
+
+        ax.set_xlabel("Correction bins")
+        ax.set_ylabel("Correction bins")
+
+        ax.set_xticks(
+            np.arange(len(self.instance.string_boundaries)),
+            self.instance.string_boundaries,
+        )
+        ax.set_yticks(
+            np.arange(len(self.instance.string_boundaries)),
+            self.instance.string_boundaries,
+        )
+
+    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.cov_matrix,
+            ax=ax,
+            annot=True,
+            cbar_kws={"label": "Covariance"},
+            cmap="Blues",
+        )
+        ax.set_title("Covariance matrix")
+
+        return ax
+
+    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.corr_matrix,
+            ax=ax,
+            annot=True,
+            cbar_kws={"label": "Pearson coeff."},
+            cmap="Blues",
+            vmin=0,
+            vmax=1,
+        )
+        ax.set_title("Correlation matrix")
+
+        return ax
 
     def plot_gaussian_variations(self, strings: list):
 
@@ -367,12 +439,64 @@ class VariationVisualizer(Visualizer):
 class TemplateVisualizer(Visualizer):
     def __init__(
         self,
-        instance: Variator,
+        instance: Template,
         namespace: list,
         dir_spec: Union[str, None] = None,
         extra_ext: Union[str, Iterable, None] = None,
     ):
         super().__init__(instance, namespace, dir_spec, extra_ext)
+
+    def annotate_matrix_plot(self, ax: Axes):
+
+        if isinstance(ax, Axes):
+            self._annotate_axis(ax)
+        elif isinstance(ax, np.ndarray):
+            for axis in ax:
+                self._annotate_axis(ax)
+
+    def _annotate_axis(self, ax):
+
+        ax.set_xlabel("Bins")
+        ax.set_ylabel("Bins")
+
+    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.cov_matrix,
+            ax=ax,
+            annot=True,
+            fmt=".2f",
+            cbar_kws={"label": "Covariance"},
+            cmap="Blues",
+            norm=LogNorm(),
+            vmin=0.0001,
+            vmax=100,
+        )
+        ax.set_title("Covariance matrix")
+
+        return ax
+
+    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.cov_matrix,
+            ax=ax,
+            annot=True,
+            fmt=".2f",
+            cbar_kws={"label": "Pearson coeff."},
+            cmap="Blues",
+            vmin=0,
+            vmax=1,
+        )
+        ax.set_title("Correlation matrix")
+
+        return ax
 
     def plot_nominal_template(self, ax: Union[Axes, None] = None):
 
@@ -417,7 +541,7 @@ class TemplateVisualizer(Visualizer):
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
 
-        x = np.linspace(0, 1, self.Nbins)
+        x = np.linspace(0, 1, self.instance.Nbins)
 
         h_up = self.instance.make_hist("up")
         h_down = self.instance.make_hist("down")
@@ -454,13 +578,12 @@ class TemplateVisualizer(Visualizer):
         )
 
         ax[0].set_ylabel("Template relative variation")
-        ax[0].set_xlabel("Fitting variable")
         ax[0].legend()
 
         ax[1].plot(
             x,
-            (h_up[0].flatten() - self.nom_hist[0].flatten())
-            / (np.sqrt(self.nom_hist[0].flatten())),
+            (h_up[0].flatten() - self.instance.nom_hist[0].flatten())
+            / (np.sqrt(self.instance.nom_hist[0].flatten())),
             linestyle="",
             marker=".",
             color="black",
