@@ -38,6 +38,7 @@ class Visualizer(ABC):
         # Get the save dir. By default this is today's date
         self.save_dir = self._get_save_dir(dir_spec)
         self.extensions = self._get_extensions(extra_ext)
+        self.save = save
         super().__init__()
 
     def create_single_figure(self):
@@ -70,7 +71,7 @@ class Visualizer(ABC):
     def save_figure(
         self,
         fig: Figure,
-        fig_name_comps: str,
+        fig_name_comps: list,
     ):
         """Helper function to save figure when it is called.
         The figure needs to be passed as a argument.
@@ -85,7 +86,7 @@ class Visualizer(ABC):
         self.check_if_dir_exists()
 
         # build the name of the figure
-        name = "_".join(self.namespace.extend(fig_name_comps))
+        name = "_".join(self.namespace + fig_name_comps)
 
         # Loop over the extensions, create the figname and then save the figure
         for ext in self.extensions:
@@ -96,7 +97,7 @@ class Visualizer(ABC):
 
             figname = name + ext
             fig.savefig(path.join(self.save_dir, figname), bbox_inches="tight", dpi=800)
-            print(f"Saved figures in {self.save_dir}")
+        print(f"Saved figures in {self.save_dir}")
 
     def check_if_dir_exists(self):
 
@@ -531,7 +532,11 @@ class TemplateVisualizer(Visualizer):
         ax.set_xlabel("Fitting variable")
 
         if self.save:
-            self.save_figure(fig, "nominal_template")
+            try:
+                self.save_figure(fig, "nominal_template")
+            except UnboundLocalError:
+                # Don't save the plot if this is a part of a bigger plot
+                pass
 
         return ax
 
@@ -621,7 +626,11 @@ class TemplateVisualizer(Visualizer):
         ax[1].set_yscale("log")
 
         if self.save:
-            self.save_figure(fig, f"up_and_down_variations")
+            try:
+                self.save_figure(fig, f"up_and_down_variations")
+            except UnboundLocalError:
+                # Don't save the plot if this is a part of a bigger plot
+                pass
 
     def plot_systematic_overview(self):
 
@@ -638,12 +647,13 @@ class TemplateVisualizer(Visualizer):
         ax3 = fig.add_subplot(gs_low[1, 0])
 
         self.plot_corr_matrix(ax0)
+        self.annotate_matrix_plot(ax0)
 
         self.plot_nominal_template(ax1)
 
         self.plot_up_and_down_variations(np.array([ax2, ax3]))
 
         if self.save:
-            self.save_figure(fig, f"systematic_overview")
+            self.save_figure(fig, ["systematic_overview"])
 
         return fig, (ax0, ax1, ax2, ax3)
