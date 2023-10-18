@@ -64,10 +64,16 @@ class Visualizer(ABC):
         self.plot_cov_matrix(ax[0])
         self.plot_corr_matrix(ax[1])
 
+        self.annotate_matrix_plot(ax)
+
         if self.save:
             self.save_figure(fig, "cov_and_corr")
 
         return fig, ax
+
+    @abstractmethod
+    def annotate_matrix_plot(self):
+        pass
 
     def save_figure(
         self,
