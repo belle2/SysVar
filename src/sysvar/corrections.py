@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Iterable
+from typing import List, Iterable, Union
 
 import numpy as np
 from pandas import DataFrame
@@ -30,7 +30,7 @@ class UncertaintyWithSameNameExists(Exception):
 @dataclass()
 class Correction:
 
-    dependant_variable: str
+    dependant_variable: Union[str, None] = None
     custom: bool = False
     systematic: str = None
     MC_production: str = None
@@ -55,6 +55,8 @@ class Correction:
                 )
 
             self.central_values = info["correction"]
+            # FIXME this will fail for 2D corrections
+            self.dependant_variable = info["dependant_variable"]
             self.lower_bounds = info["min"]
             self.upper_bounds = info["max"]
             # Add the fully correlated uncertainties
