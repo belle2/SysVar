@@ -1,5 +1,5 @@
 from datetime import datetime
-from os import path, mkdir
+from os import path, makedirs
 
 from typing import Union, Iterable
 
@@ -36,6 +36,7 @@ class Visualizer(ABC):
 
         self.instance = instance
         self.namespace = namespace
+        self.top_dir = top_dir
         # Get the save dir. By default this is today's date
         self.save_dir = self._get_save_dir(top_dir, dir_spec)
         self.extensions = self._get_extensions(extra_ext)
@@ -67,7 +68,7 @@ class Visualizer(ABC):
         self.annotate_matrix_plot(ax)
 
         if self.save:
-            self.save_figure(fig, "cov_and_corr")
+            self.save_figure(fig, ["cov_and_corr"])
 
         return fig, ax
 
@@ -93,7 +94,7 @@ class Visualizer(ABC):
         self.check_if_dir_exists()
 
         # build the name of the figure
-        name = "_".join(self.namespace + fig_name_comps)
+        name = "_".join((self.namespace + fig_name_comps))
 
         # Loop over the extensions, create the figname and then save the figure
         for ext in self.extensions:
@@ -111,7 +112,7 @@ class Visualizer(ABC):
         if path.exists(self.save_dir):
             pass
         else:
-            mkdir(self.save_dir)
+            makedirs(self.save_dir)
 
     @staticmethod
     def _get_extensions(extra_ext):
@@ -134,7 +135,7 @@ class Visualizer(ABC):
 
         today = datetime.today().strftime("%Y-%m-%d")
 
-        dir_name = today if dir_spec is None else "_".join((today, dir_spec))
+        dir_name = today if dir_spec is None else "=".join((dir_spec, today))
 
         return path.join(top_dir, dir_name)
 
@@ -195,11 +196,12 @@ class CorrectionVisualizer(Visualizer):
         self,
         instance: Correction,
         namespace: list,
+        top_dir: str,
         dir_spec: Union[str, None] = None,
         extra_ext: Union[str, Iterable, None] = None,
         save: bool = False,
     ):
-        super().__init__(instance, namespace, dir_spec, extra_ext, save)
+        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
 
     def annotate_matrix_plot(self, ax: Axes):
         raise NoMatrixError(
@@ -250,7 +252,7 @@ class CorrectionVisualizer(Visualizer):
         plt.legend(bbox_to_anchor=(1, 0.7))
 
         if self.save:
-            self.save_figure(fig, "error_comparison")
+            self.save_figure(fig, ["error_comparison"])
 
         return fig, ax
 
@@ -260,11 +262,12 @@ class UncertaintyVisualizer(Visualizer):
         self,
         instance: Uncertainty,
         namespace: list,
+        top_dir: str,
         dir_spec: Union[str, None] = None,
         extra_ext: Union[str, Iterable, None] = None,
         save: bool = False,
     ):
-        super().__init__(instance, namespace, dir_spec, extra_ext, save)
+        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
 
     def annotate_matrix_plot(self, ax: Axes):
 
@@ -272,7 +275,7 @@ class UncertaintyVisualizer(Visualizer):
             self._annotate_axis(ax)
         elif isinstance(ax, np.ndarray):
             for axis in ax:
-                self._annotate_axis(ax)
+                self._annotate_axis(axis)
 
     def _annotate_axis(self, ax):
 
@@ -328,11 +331,21 @@ class VariationVisualizer(Visualizer):
         self,
         instance: Variator,
         namespace: list,
+        top_dir: str,
         dir_spec: Union[str, None] = None,
         extra_ext: Union[str, Iterable, None] = None,
         save: bool = False,
     ):
-        super().__init__(instance, namespace, dir_spec, extra_ext, save)
+        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+        self._strings = None
+
+    @property
+    def strings(self) -> list:
+        return self._strings
+
+    @strings.setter
+    def strings(self, values):
+        self._strings = values
 
     def annotate_matrix_plot(self, ax: Axes):
 
@@ -340,7 +353,7 @@ class VariationVisualizer(Visualizer):
             self._annotate_axis(ax)
         elif isinstance(ax, np.ndarray):
             for axis in ax:
-                self._annotate_axis(ax)
+                self._annotate_axis(axis)
 
     def _annotate_axis(self, ax):
 
@@ -348,12 +361,12 @@ class VariationVisualizer(Visualizer):
         ax.set_ylabel("Correction bins")
 
         ax.set_xticks(
-            np.arange(len(self.instance.string_boundaries)),
-            self.instance.string_boundaries,
+            np.arange(len(self._strings)),
+            self._strings,
         )
         ax.set_yticks(
-            np.arange(len(self.instance.string_boundaries)),
-            self.instance.string_boundaries,
+            np.arange(len(self._strings)),
+            self._strings,
         )
 
     def plot_cov_matrix(self, ax: Union[Axes, None] = None):
@@ -390,13 +403,12 @@ class VariationVisualizer(Visualizer):
 
         return ax
 
-    def plot_gaussian_variations(self, strings: list):
+    def plot_gaussian_variations(self):
 
         """
         Plot Gaussian variations of the corrections.
 
         Args:
-            strings (list): A list of the strings of the range of the dependant variables.
 
         Returns:
             None
@@ -407,23 +419,23 @@ class VariationVisualizer(Visualizer):
             1, len(self.instance.central_values), figsize=(16, 4.5), dpi=800
         )
 
-        for i, (mean, s) in enumerate(zip(self.instance.central_values, strings)):
+        for i, (mean, s) in enumerate(zip(self.instance.central_values, self._strings)):
 
             # Plot the variation
-            ax[i].hist(self.instance.variations, color="black", histtype="step")
+            ax[i].hist(self.instance.variations[:, i], color="black", histtype="step")
 
             # Draw a line at the mean value
-            ax.axvline(mean, color="brown")
+            ax[i].axvline(mean, color="brown")
             # Add some annotations
-            ax.annotate(
-                f"{len(self.instance.Nvar)} variations",
+            ax[i].annotate(
+                f"{str(self.instance.Nvar)} variations",
                 (0.69, 0.9),
                 xycoords="axes fraction",
             )
-            ax.annotate(s, (0.69, 0.85), xycoords="axes fraction")
+            ax[i].annotate(s, (0.69, 0.85), xycoords="axes fraction")
 
         if self.save:
-            self.save_figure(fig, "gaussian_variations")
+            self.save_figure(fig, ["gaussian_variations"])
 
         return fig, ax
 
@@ -454,7 +466,7 @@ class VariationVisualizer(Visualizer):
             )
 
         if self.save:
-            self.save_figure(fig, "relative_variations")
+            self.save_figure(fig, ["relative_variations"])
 
         return fig, ax
 
@@ -464,11 +476,12 @@ class TemplateVisualizer(Visualizer):
         self,
         instance: Template,
         namespace: list,
+        top_dir: str,
         dir_spec: Union[str, None] = None,
         extra_ext: Union[str, Iterable, None] = None,
         save: bool = False,
     ):
-        super().__init__(instance, namespace, dir_spec, extra_ext, save)
+        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
 
     def annotate_matrix_plot(self, ax: Axes):
 
@@ -539,7 +552,7 @@ class TemplateVisualizer(Visualizer):
 
         if self.save:
             try:
-                self.save_figure(fig, "nominal_template")
+                self.save_figure(fig, ["nominal_template"])
             except UnboundLocalError:
                 # Don't save the plot if this is a part of a bigger plot
                 pass
@@ -566,7 +579,7 @@ class TemplateVisualizer(Visualizer):
         ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 
         if self.save:
-            self.save_figure(fig, f"{str(Nvar)} variations")
+            self.save_figure(fig, [f"{str(Nvar)} variations"])
 
         return fig, ax
 
@@ -633,7 +646,7 @@ class TemplateVisualizer(Visualizer):
 
         if self.save:
             try:
-                self.save_figure(fig, f"up_and_down_variations")
+                self.save_figure(fig, [f"up_and_down_variations"])
             except UnboundLocalError:
                 # Don't save the plot if this is a part of a bigger plot
                 pass
