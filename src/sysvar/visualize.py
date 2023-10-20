@@ -29,7 +29,7 @@ class Visualizer(ABC):
         instance: Union[Correction, Uncertainty, Variator, Template],
         namespace: list,
         top_dir: str,
-        dir_spec: Union[str, None] = None,
+        dir_spec: Union[str, None, bool] = None,
         extra_ext: Union[str, Iterable, None] = None,
         save: bool = False,
     ):
@@ -133,11 +133,15 @@ class Visualizer(ABC):
     @staticmethod
     def _get_save_dir(top_dir, dir_spec):
 
-        today = datetime.today().strftime("%Y-%m-%d")
+        if dir_spec:
+            today = datetime.today().strftime("%Y-%m-%d")
+            dir_name = today if dir_spec is None else "=".join((dir_spec, today))
 
-        dir_name = today if dir_spec is None else "=".join((dir_spec, today))
+            outdir = path.join(top_dir, dir_name)
+        else:
+            outdir = top_dir
 
-        return path.join(top_dir, dir_name)
+        return outdir
 
     @staticmethod
     def plot_variation_on_axis(
