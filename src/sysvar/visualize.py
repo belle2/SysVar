@@ -47,10 +47,6 @@ class Visualizer(ABC):
         return plt.subplots(figsize=(8, 5), dpi=800)
 
     @abstractmethod
-    def annotate_matrix_plot(self, ax: Axes):
-        pass
-
-    @abstractmethod
     def plot_cov_matrix(self):
         pass
 
@@ -680,3 +676,145 @@ class TemplateVisualizer(Visualizer):
             self.save_figure(fig, ["systematic_overview"])
 
         return fig, (ax0, ax1, ax2, ax3)
+
+
+class FFModelVisualizer(Visualizer):
+    def __init__(
+        self,
+        instance: Template,
+        namespace: list,
+        top_dir: str,
+        dir_spec: Union[str, None] = None,
+        extra_ext: Union[str, Iterable, None] = None,
+        save: bool = False,
+    ):
+        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+
+    def annotate_matrix_plot(self, ax: Axes):
+
+        if isinstance(ax, Axes):
+            self._annotate_axis(ax)
+        elif isinstance(ax, np.ndarray):
+            for axis in ax:
+                self._annotate_axis(axis)
+
+    def _annotate_axis(self, ax):
+
+        ax.set_xlabel("FF model parameters")
+        ax.set_ylabel("FF model parameters")
+
+        ax.set_xticks(
+            np.arange(self.instance.num_params) + 0.5,
+            self.instance.params.keys(),
+        )
+        ax.set_yticks(
+            np.arange(self.instance.num_params) + 0.5,
+            self.instance.params.keys(),
+        )
+
+    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.cov_matrix,
+            ax=ax,
+            annot=True,
+            cbar_kws={"label": "Covariance"},
+            cmap="Blues",
+        )
+        ax.set_title("Covariance matrix")
+        self.annotate_matrix_plot(ax)
+
+        return ax
+
+    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.corr_matrix,
+            ax=ax,
+            annot=True,
+            cbar_kws={"label": "Pearson coeff."},
+            cmap="Blues",
+            vmin=0,
+            vmax=1,
+        )
+
+        ax.set_title(
+            " ".join(
+                (
+                    "Correlation matrix",
+                    self.instance.name,
+                    r"$\mathrm{B} \rightarrow$",
+                    get_latex_symbol(self.instance.Xc),
+                    get_latex_symbol(self.instance.lep),
+                    get_latex_symbol("Nu"),
+                )
+            )
+        )
+
+        return ax
+
+    def plot_params(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        ax.errorbar(
+            x=np.arange(self.instance.num_params) + 0.5,
+            y=[y.nominal_value for y in self.instance.params.values()],
+            yerr=[y.std_dev for y in self.instance.params.values()],
+            linestyle="",
+            color="black",
+            marker=".",
+        )
+
+        ax.table(
+            cellText=[
+                [round(x.nominal_value, 4) for x in self.instance.params.values()],
+                [round(x.std_dev, 4) for x in self.instance.params.values()],
+            ],
+            rowLabels=["value", "unc"],
+            colLabels=[x for x in self.instance.params.keys()],
+            loc="top",
+        )
+
+        ax.set_xticks(
+            np.arange(self.instance.num_params) + 0.5,
+            self.instance.params.keys(),
+        )
+        ax.set_xlabel("FF model parameters")
+        ax.set_ylabel("Value")
+        # ax.set_title("Model parameter values")
+
+        return ax
+
+    def plot_corr_and_params(self):
+
+        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=800)
+
+        self.plot_params(ax[0])
+
+        self.plot_corr_matrix(ax[1])
+        self.annotate_matrix_plot(ax[1])
+
+        return fig, ax
+
+
+def get_latex_symbol(key):
+
+    dictionary = {
+        "D**0": r"$\mathrm{D^{**}_{0}}$",
+        "D**1": r"$\mathrm{D^{**}_{1}}$",
+        "D*": r"$\mathrm{D^{*}}$",
+        "D": "D",
+        "Tau": r"$\mathrm{\tau}$",
+        "Ell": r"$\mathrm{\ell}$",
+        "Nu": r"$\mathrm{\nu}$",
+    }
+
+    return dictionary[key]
