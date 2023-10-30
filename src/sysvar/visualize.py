@@ -470,6 +470,40 @@ class VariationVisualizer(Visualizer):
 
         return fig, ax
 
+    def plot_relative_variations_in_grid(self, nbins: int = 20):
+
+        counts = []
+        bin_edges = []
+
+        relative_variations = self.instance.variations / self.instance.central_values
+
+        min_var = np.round(np.min(relative_variations), 1)
+        max_var = np.round(np.max(relative_variations), 1)
+
+        for i in range(len(self.instance.central_values)):
+            hist = np.histogram(
+                relative_variations[:, i], range=(min_var, max_var), bins=nbins
+            )
+            counts.append(hist[0])
+            bin_edges.append(hist[1])
+
+        fig, ax = plt.subplots(figsize=(5, 10))
+
+        cb = ax.matshow(np.array(counts).T)
+        plt.colorbar(cb)
+
+        ax.set_xticks(np.arange(len(self.strings)), self.strings, rotation=90)
+        ax.set_yticks(
+            np.arange(len(bin_edges[0][:-1])),
+            np.round((bin_edges[0][1:] + bin_edges[0][:-1]) / 2, 3),
+        )
+
+        ax.set_ylabel("Relative variation")
+
+        ax.invert_yaxis()
+
+        return fig, ax
+
 
 class TemplateVisualizer(Visualizer):
     def __init__(
