@@ -800,8 +800,8 @@ class FFModelVisualizer(Visualizer):
 
         ax.errorbar(
             x=np.arange(self.instance.num_params) + 0.5,
-            y=[y.nominal_value for y in self.instance.params.values()],
-            yerr=[y.std_dev for y in self.instance.params.values()],
+            y=self.instance.parameter_central_values,
+            yerr=self.instance.parameter_errors,
             linestyle="",
             color="black",
             marker=".",
@@ -809,11 +809,14 @@ class FFModelVisualizer(Visualizer):
 
         ax.table(
             cellText=[
-                [round(x.nominal_value, 4) for x in self.instance.params.values()],
-                [round(x.std_dev, 4) for x in self.instance.params.values()],
+                [round(x, 4) for x in self.instance.parameter_central_values],
+                [round(x, 4) for x in self.instance.parameter_errors],
             ],
             rowLabels=["value", "unc"],
-            colLabels=[x for x in self.instance.params.keys()],
+            colLabels=[
+                x if x != "DelMbc" else "DelMbc(mc)"
+                for x in self.instance.params.keys()
+            ],
             loc="top",
         )
 
