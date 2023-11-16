@@ -119,13 +119,13 @@ def get_varied_FF_central_values(model):
     # get central values covariance matrices:
     cvs = np.array(
         [
-            param.nominal_value if name != "DelMbc" else param["mc"].nominal_value
+            param.nominal_value if name != "DelMbc" else param["DelMbc"].nominal_value
             for name, param in model.params.items()
         ]
     )
     errors = np.array(
         [
-            param.std_dev if name != "DelMbc" else param["mc"].std_dev
+            param.std_dev if name != "DelMbc" else param["DelMbc"].std_dev
             for name, param in model.params.items()
         ]
     )
