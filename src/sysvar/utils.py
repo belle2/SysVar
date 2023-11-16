@@ -125,7 +125,7 @@ def get_varied_FF_central_values(model):
     )
     errors = np.array(
         [
-            param.std_dev if name != "DelMbc" else param["mc"].nominal_value
+            param.std_dev if name != "DelMbc" else param["mc"].std_dev
             for name, param in model.params.items()
         ]
     )
