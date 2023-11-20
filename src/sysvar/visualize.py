@@ -846,7 +846,11 @@ def get_latex_symbol(key):
 
     dictionary = {
         "D**0": r"$\mathrm{D^{**}_{0}}$",
+        "D**0*": r"$\mathrm{D^{**}_{0'}}$",
         "D**1": r"$\mathrm{D^{**}_{1}}$",
+        "D**1*": r"$\mathrm{D^{**}_{1'}}$",
+        "D**2": r"$\mathrm{D^{**}_{2}}$",
+        "D**2*": r"$\mathrm{D^{**}_{2'}}$",
         "D*": r"$\mathrm{D^{*}}$",
         "D": "D",
         "Tau": r"$\mathrm{\tau}$",
