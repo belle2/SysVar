@@ -416,10 +416,12 @@ class VariationVisualizer(Visualizer):
         """
 
         fig, ax = plt.subplots(
-            1, len(self.instance.central_values), figsize=(16, 4.5), dpi=800
+            1, len(self.instance.correction.central_values), figsize=(16, 4.5), dpi=800
         )
 
-        for i, (mean, s) in enumerate(zip(self.instance.central_values, self._strings)):
+        for i, (mean, s) in enumerate(
+            zip(self.instance.correction.central_values, self._strings)
+        ):
 
             # Plot the variation
             ax[i].hist(self.instance.variations[:, i], color="black", histtype="step")
@@ -460,7 +462,8 @@ class VariationVisualizer(Visualizer):
             self.plot_variation_on_axis(
                 ax=ax,
                 x=value_edges,
-                variation=self.instance.variations[i, :] / self.instance.central_values,
+                variation=self.instance.variations[i, :]
+                / self.instance.correction.central_values,
                 index=i,
                 plot_func="stairs",
             )
@@ -475,12 +478,14 @@ class VariationVisualizer(Visualizer):
         counts = []
         bin_edges = []
 
-        relative_variations = self.instance.variations / self.instance.central_values
+        relative_variations = (
+            self.instance.variations / self.instance.correction.central_values
+        )
 
         min_var = np.round(np.min(relative_variations), 1)
         max_var = np.round(np.max(relative_variations), 1)
 
-        for i in range(len(self.instance.central_values)):
+        for i in range(len(self.instance.correction.central_values)):
             hist = np.histogram(
                 relative_variations[:, i], range=(min_var, max_var), bins=nbins
             )
@@ -556,7 +561,7 @@ class TemplateVisualizer(Visualizer):
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
 
         sns.heatmap(
-            self.instance.cov_matrix,
+            self.instance.corr_matrix,
             ax=ax,
             annot=True,
             fmt=".2f",

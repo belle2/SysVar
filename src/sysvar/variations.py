@@ -25,7 +25,7 @@ class Variator(ABC):
 
     """
 
-    def __init__(self, central_values: Iterable, uncertainties: list, Nvar: int = 20):
+    def __init__(self, correction: Correction, Nvar: int = 20):
 
         """
         Initialize a Variator with a correction object.
@@ -35,8 +35,7 @@ class Variator(ABC):
 
         """
 
-        self.central_values = np.array(central_values)
-        self.uncertainties = uncertainties
+        self.correction = correction
         self.Nvar = Nvar
 
     @property
@@ -54,7 +53,9 @@ class Variator(ABC):
             np.ndarray: The total covariance matrix.
 
         """
-        return np.add(*[unc.cov_matrix for unc in self.uncertainties.values()])
+        return np.add(
+            *[unc.cov_matrix for unc in self.correction.uncertainties.values()]
+        )
 
     @property
     def corr_matrix(self) -> np.ndarray:
@@ -75,7 +76,7 @@ class Variator(ABC):
 
         """
         # Create a zero-ed matrix to get the dimensions right
-        zeros = np.zeros(len(self.central_values))
+        zeros = np.zeros(len(self.correction.central_values))
 
         # Generate the up or down variations based on a standard normal
         return np.random.multivariate_normal(zeros, covariance, Nvar)
@@ -97,7 +98,7 @@ class Variator(ABC):
 
         variations = self.generate_variations(self.Nvar, self.cov_matrix)
 
-        return self.central_values + variations
+        return self.correction.central_values + variations
 
     def get_variations_from_uncertainty(self, Nvar: int, name: str) -> np.ndarray:
         """
@@ -114,4 +115,6 @@ class Variator(ABC):
 
         """
 
-        return self.generate_variations(Nvar, self.uncertainties[name].cov_matrix)
+        return self.generate_variations(
+            Nvar, self.correction.uncertainties[name].cov_matrix
+        )
