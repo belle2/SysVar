@@ -28,29 +28,29 @@ class Template(ABC):
         df: DataFrame,
         binning: dict,
         total_weight: str,
-        syst_weight: str,
-        correction: Correction,
-        variator: Variator,
+        syst_weight: Union[None, str] = None,
+        correction: Union[None, Correction] = None,
+        variator: Union[None, Variator] = None,
     ):
+        columns = []
         if self._is_correct_binning(df.columns, binning):
             self.binning = binning
+            columns.extend(list(binning.keys()))
         if self._is_existing_variable(total_weight, df.columns):
             self.total_weight = total_weight
-        if self._is_existing_variable(syst_weight, df.columns):
-            self.syst_weight = syst_weight
+            columns.append(total_weight)
+        if syst_weight is not None:
+            self._is_existing_variable(syst_weight, df.columns)
+            columns.append(syst_weight)
+        self.syst_weight = syst_weight
         # Make a deep copy only of the columns that are needed
-        self.df = df[
-            [
-                *binning.keys(),
-                self.total_weight,
-                self.syst_weight,
-                correction.dependant_variable,
-            ]
-        ].copy(deep=True)
+        if correction is not None:
+            columns.append(correction.dependant_variable)
+        self.df = df[columns].copy(deep=True)
 
         self.correction = correction
-        self.variations = variator.variations
-        self.Nvar = variator.Nvar
+        self.variations = variator.variations if variator is not None else variator
+        self.Nvar = variator.Nvar if variator is not None else variator
 
     @property
     def cov_matrix(self) -> np.ndarray:
@@ -163,9 +163,9 @@ class Template2D(Template):
         df: DataFrame,
         binning: dict,
         total_weight: str,
-        syst_weight: str,
-        correction: Correction,
-        variator: Variator,
+        syst_weight: Union[None, str] = None,
+        correction: Union[None, Correction] = None,
+        variator: Union[None, Variator] = None,
     ):
         super().__init__(df, binning, total_weight, syst_weight, correction, variator)
 
@@ -187,8 +187,9 @@ class Template2D(Template):
                 * self.df[f"{self.syst_weight}_var_{index}"]
             )
 
-        return np.histogramdd(
+        hist = np.histogramdd(
             np.array(self.df[[*self.binning.keys()]]),
             bins=[bins for bins in self.binning.values()],
             weights=weights,
         )
+        return (hist[0].flatten(), np.linspace(0, 1, hist[0].flatten().shape[0] + 1))
