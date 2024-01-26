@@ -1,5 +1,6 @@
 from datetime import datetime
 from os import path, makedirs
+import math
 
 from typing import Union, Iterable
 
@@ -690,31 +691,67 @@ class TemplateVisualizer(Visualizer):
                 # Don't save the plot if this is a part of a bigger plot
                 pass
 
+    def plot_eigenvalues(self, ax: Union[np.ndarray, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        x = np.arange(self.instance.Nbins)
+
+        ax.plot(x, self.instance.eigen_values, linestyle="", marker=".", color="black")
+
+        ax.set_yscale("log")
+        secax = ax.secondary_xaxis(
+            "top",
+        )
+        ax.set_xticks(x, [])
+        ax.set_ylabel("Eigenvalues")
+        ax.set_xlabel("Eigendirection")
+
+        eigenvalue_ticks = [
+            round(x, 3)
+            if x > 10e-3
+            else rf"~$10^{{{math.floor(math.log(abs(x), 10))}}}$"
+            for x in self.instance.eigen_values
+        ]
+        secax.set_xticks(x, eigenvalue_ticks, fontsize=10)
+
+        for ticklabel, egv_tick in zip(secax.get_xticklabels(), eigenvalue_ticks):
+            if isinstance(egv_tick, float):
+                ticklabel.set_color("#07529a")
+                ticklabel.set_fontsize(10)
+                ticklabel.set_rotation(90)
+            else:
+                ticklabel.set_color("grey")
+                ticklabel.set_fontsize(7)
+
     def plot_systematic_overview(self):
 
         # gridspec inside gridspec
         fig = plt.figure(figsize=(16, 10), dpi=800)
 
         gs = mpl.gridspec.GridSpec(2, 6, wspace=0.4, hspace=0.15)
-        ax0 = fig.add_subplot(gs[0, 1:5])
-        ax1 = fig.add_subplot(gs[1, :3])
-        gs_low = gs[1, 3:].subgridspec(2, 1, height_ratios=[3.5, 1], hspace=0.1)
 
-        ax2 = fig.add_subplot(gs_low[0, 0])
-        ax2.set_xticks([])
-        ax3 = fig.add_subplot(gs_low[1, 0])
-
+        ax0 = fig.add_subplot(gs[0, 0:4])
         self.plot_corr_matrix(ax0)
         self.annotate_matrix_plot(ax0)
 
+        ax01 = fig.add_subplot(gs[0, 4:6])
+        self.plot_eigenvalues(ax01)
+
+        ax1 = fig.add_subplot(gs[1, :3])
         self.plot_nominal_template(ax1)
 
+        gs_low = gs[1, 3:].subgridspec(2, 1, height_ratios=[3.5, 1], hspace=0.1)
+        ax2 = fig.add_subplot(gs_low[0, 0])
+        ax2.set_xticks([])
+        ax3 = fig.add_subplot(gs_low[1, 0])
         self.plot_up_and_down_variations(np.array([ax2, ax3]))
 
         if self.save:
             self.save_figure(fig, ["systematic_overview"])
 
-        return fig, (ax0, ax1, ax2, ax3)
+        return fig, (ax0, ax01, ax1, ax2, ax3)
 
 
 class FFModelVisualizer(Visualizer):

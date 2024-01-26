@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import cached_property
+
 from abc import ABC, abstractmethod
 from typing import Union
 
@@ -59,6 +61,22 @@ class Template(ABC):
     @property
     def corr_matrix(self) -> np.ndarray:
         return np.corrcoef(self._get_absolute_variations())
+
+    @cached_property
+    def eigen_decomposition(self) -> tuple:
+        return np.linalg.eig(self.cov_matrix)
+
+    @property
+    def eigen_values(self) -> np.ndarray:
+        return self.eigen_decomposition[0]
+
+    @property
+    def eigen_vectors(self) -> np.ndarray:
+        return self.eigen_decomposition[1]
+
+    @property
+    def eigen_variations(self) -> np.ndarray:
+        return self.eigen_vectors * np.sqrt(self.eigen_values)
 
     @property
     def Nbins(self) -> int:
