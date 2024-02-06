@@ -195,9 +195,15 @@ class Template2D(Template):
             # Take the nominal total weight
             weights = np.array(self.df[self.total_weight])
         elif isinstance(index, str):
-            weights = (self.df[self.total_weight] / self.df[self.syst_weight]) * (
-                self.df["_".join((self.syst_weight, index))]
-            )
+            if index == "MC":
+                weights = np.square(self.df[self.total_weight])
+            elif index in ["up", "down"]:
+                weights = (self.df[self.total_weight] / self.df[self.syst_weight]) * (
+                    self.df["_".join((self.syst_weight, index))]
+                )
+            else:
+                raise NotImplementedError("only MC, up and down variations implemented")
+
         else:
             # Divide with the nominal systematic weight and multiply with the varied one
             weights = np.array(
