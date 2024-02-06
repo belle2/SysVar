@@ -96,6 +96,27 @@ def corr2cov(corr, var):
     return np.matmul(D, np.matmul(corr, D))
 
 
+def cov2corr(covariance):
+    """
+    Compute the correlation matrix from the given covariance matrix.
+
+    Parameters:
+    covariance : numpy.ndarray
+        The covariance matrix.
+
+    Returns:
+    numpy.ndarray
+        The correlation matrix.
+    """
+    v = np.sqrt(np.diag(covariance))  # Compute the standard deviation for each variable
+    outer_v = np.outer(v, v)  # Compute the outer product of the standard deviations
+    correlation = (
+        covariance / outer_v
+    )  # Divide the covariance matrix by the outer product of standard deviations
+    correlation[covariance == 0] = 0  # Set correlations with zero covariance to zero
+    return np.real(correlation)  # Return the real part of the correlation matrix
+
+
 def get_varied_FF_central_values(model):
     """
     Inhereted from Henrik
