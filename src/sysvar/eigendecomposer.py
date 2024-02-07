@@ -1,5 +1,7 @@
 from functools import cached_property
 
+from tqdm import tqdm
+
 import numpy as np
 from pandas import DataFrame
 
@@ -113,15 +115,12 @@ class EigenDecomposer:
     def eigen_variations(self) -> np.ndarray:
         return self.eigen_vectors * np.sqrt(self.eigen_values)
 
-    @staticmethod
-    def var2cov(mat) -> np.ndarray:
-        return np.outer(mat, mat)
-
-    def find_important_eigendimension_indices(self, precision: float = 0.01):
+    @cached_property
+    def max_differences(self) -> list:
 
         total_N_vectors = len(self.eigen_vectors)
         max_differences = []
-        for n_vectors in range(total_N_vectors):
+        for n_vectors in tqdm(range(total_N_vectors)):
 
             dimension_subset = self.eigen_variations[:, : n_vectors + 1].T
             subset_covariances = [self.var2cov(x) for x in dimension_subset]
@@ -130,12 +129,23 @@ class EigenDecomposer:
                 np.abs(np.real(self.cov - np.sum(subset_covariances, axis=0))).max()
             )
 
-        important_dims = np.asarray(max_differences) > precision
+        return max_differences
+
+    @staticmethod
+    def var2cov(mat) -> np.ndarray:
+        return np.outer(mat, mat)
+
+    def find_important_eigendimension_indices(self, precision: float = 0.01):
+
+        important_dims = np.asarray(self.max_differences) / self.cov.max() > precision
 
         self.N_important_dims = np.sum(important_dims)
         self.important_dims_indices = important_dims
-
-        return important_dims
+        logging.info(
+            f"Found that %s eigendirections matter for %s per cent precision",
+            self.N_important_dims,
+            precision,
+        )
 
     def _get_unrolled_variations(self):
 
@@ -172,9 +182,16 @@ class EigenDecomposer:
                             k_var + 1,
                         )
                         newfile[
-                            f"{reco_mode[1]}/{ctgy}/{self.syst_effect}_var{k_var+1}"
+                            f"{reco_mode[1]}/{ctgy}/{self.syst_effect}_var{k_var+1}_up"
                         ] = (
                             nominals[i_rm, j_ctgy, :]
                             + variations[i_rm, j_ctgy, :, k_var],
+                            np.linspace(0, 1, self.Nbins + 1),
+                        )
+                        newfile[
+                            f"{reco_mode[1]}/{ctgy}/{self.syst_effect}_var{k_var+1}_down"
+                        ] = (
+                            nominals[i_rm, j_ctgy, :]
+                            - variations[i_rm, j_ctgy, :, k_var],
                             np.linspace(0, 1, self.Nbins + 1),
                         )
