@@ -135,6 +135,7 @@ class Correction:
 class BFCorrection:
 
     dependant_variable: Union[str, None] = None
+    custom: bool = False
     systematic: str = None
     MC_production: str = None
     central_values: Iterable = None
@@ -157,11 +158,12 @@ class BFCorrection:
         )
 
         decaydec_BFs = unp.uarray(
-            [x["decay_dec"][0] for x in info["modes"].values()],
+            [x["decay_dec"] for x in info["modes"].values()],
             [0 for x in info["modes"].values()],
         )
 
         corrections = pdg_BFs / decaydec_BFs
+        print(decaydec_BFs)
 
         self.central_values = list(unp.nominal_values(corrections))
         # FIXME this will fail for 2D corrections
@@ -171,22 +173,23 @@ class BFCorrection:
         daughter_pdgs = [
             x for mode in info["modes"].values() for x in mode["daughters"]
         ]
-        self._strings = []
+        self.strings = []
         for daughter_set in daughter_pdgs:
             daughter_names = [Particle.from_pdgid(x).latex_name for x in daughter_set]
-            self._strings.append(
+            self.strings.append(
                 rf"${mother} \rightarrow {' '.join(str(x) for x in daughter_names)}$"
             )
 
-        # Add the fully correlated uncertainties
-        for unc_name, unc_values in info["fully_correlated"].items():
-            self.uncertainties.update(
-                {
-                    unc_name: UncorrelatedUncertainty(
-                        "BF uncertainty", list(unp.std_devs(corrections)), strings
-                    )
-                }
-            )
+        # Add the uncertainties as fully uncorrelated. This is a choice.
+        # Can be very complicated as some of these modes may have been measured
+        # by the same experiments, with complicated correlations
+        self.uncertainties.update(
+            {
+                "BF uncertainty": UncorrelatedUncertainty(
+                    "BF uncertainty", list(unp.std_devs(corrections)), self.strings
+                )
+            }
+        )
 
 
 def add_weights_to_dataframe(
