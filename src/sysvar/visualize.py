@@ -364,12 +364,12 @@ class VariationVisualizer(Visualizer):
         ax.set_xticks(
             np.arange(len(self._strings)) + 0.5,
             self._strings,
-            rotation=0 if isinstance(self.instance.correction, BFCorrection) else 90,
+            rotation=90 if isinstance(self.instance.correction, BFCorrection) else 0,
         )
         ax.set_yticks(
             np.arange(len(self._strings)) + 0.5,
             self._strings,
-            rotation=90 if isinstance(self.instance.correction, BFCorrection) else 0,
+            rotation=0 if isinstance(self.instance.correction, BFCorrection) else 90,
         )
 
     def plot_cov_matrix(self, ax: Union[Axes, None] = None):
