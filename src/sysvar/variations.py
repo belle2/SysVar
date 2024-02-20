@@ -48,14 +48,18 @@ class Variator(ABC):
         Build the total covariance matrix from all added uncertainties.
         Here all the covariance matrices from all uncertainties are summed up
         to a total covariance matrix
+        Return the covariance matrix from one uncertainty type of only one is present
 
         Returns:
             np.ndarray: The total covariance matrix.
 
         """
-        return np.add(
-            *[unc.cov_matrix for unc in self.correction.uncertainties.values()]
-        )
+        if len(self.correction.uncertainties.values()) > 1:
+            return np.add(
+                *[unc.cov_matrix for unc in self.correction.uncertainties.values()]
+            )
+        else:
+            return next(iter(self.correction.uncertainties.values())).cov_matrix
 
     @property
     def corr_matrix(self) -> np.ndarray:

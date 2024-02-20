@@ -15,7 +15,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.colors import LogNorm
 
-from sysvar.corrections import Correction
+from sysvar.corrections import Correction, BFCorrection
 from sysvar.uncertainties import Uncertainty
 from sysvar.variations import Variator
 from sysvar.templates import Template
@@ -362,12 +362,14 @@ class VariationVisualizer(Visualizer):
         ax.set_ylabel("Correction bins")
 
         ax.set_xticks(
-            np.arange(len(self._strings)),
+            np.arange(len(self._strings)) + 0.5,
             self._strings,
+            rotation=0 if isinstance(self.instance.correction, BFCorrection) else 90,
         )
         ax.set_yticks(
-            np.arange(len(self._strings)),
+            np.arange(len(self._strings)) + 0.5,
             self._strings,
+            rotation=90 if isinstance(self.instance.correction, BFCorrection) else 0,
         )
 
     def plot_cov_matrix(self, ax: Union[Axes, None] = None):

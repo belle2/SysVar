@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
 from typing import List, Iterable, Union
 
+from particle import Particle
+
 import numpy as np
 from pandas import DataFrame
+from uncertainties import unumpy as unp, ufloat
 
 from sysvar.uncertainties import (
     Uncertainty,
@@ -126,6 +129,64 @@ class Correction:
             )
         else:
             self.uncertainties.update({unc.name: unc})
+
+
+@dataclass
+class BFCorrection:
+
+    dependant_variable: Union[str, None] = None
+    systematic: str = None
+    MC_production: str = None
+    central_values: Iterable = None
+    strings: Iterable = None
+    uncertainties: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+
+        # If this is a normal Belle II correction load it from configs
+        try:
+            info = read_yaml(self.systematic, self.MC_production)
+        except TypeError:
+            raise MissingInformationError(
+                "Need to specify the systematic effect and the MC production in the positional arguments"
+            )
+
+        pdg_BFs = unp.uarray(
+            [x["pdg_live"][0] for x in info["modes"].values()],
+            [x["pdg_live"][1] for x in info["modes"].values()],
+        )
+
+        decaydec_BFs = unp.uarray(
+            [x["decay_dec"][0] for x in info["modes"].values()],
+            [0 for x in info["modes"].values()],
+        )
+
+        corrections = pdg_BFs / decaydec_BFs
+
+        self.central_values = list(unp.nominal_values(corrections))
+        # FIXME this will fail for 2D corrections
+        self.dependant_variable = info["general"]["dependant_variable"]
+
+        mother = Particle.from_pdgid(info["general"]["mother_particle"]).latex_name
+        daughter_pdgs = [
+            x for mode in info["modes"].values() for x in mode["daughters"]
+        ]
+        self._strings = []
+        for daughter_set in daughter_pdgs:
+            daughter_names = [Particle.from_pdgid(x).latex_name for x in daughter_set]
+            self._strings.append(
+                rf"${mother} \rightarrow {' '.join(str(x) for x in daughter_names)}$"
+            )
+
+        # Add the fully correlated uncertainties
+        for unc_name, unc_values in info["fully_correlated"].items():
+            self.uncertainties.update(
+                {
+                    unc_name: UncorrelatedUncertainty(
+                        "BF uncertainty", list(unp.std_devs(corrections)), strings
+                    )
+                }
+            )
 
 
 def add_weights_to_dataframe(
