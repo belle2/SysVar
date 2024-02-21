@@ -162,8 +162,13 @@ class BFCorrection:
             [0 for x in info["modes"].values()],
         )
 
-        corrections = pdg_BFs / decaydec_BFs
-        print(decaydec_BFs)
+        # Safe 0 division. Returns 1+- 0 for the ones where decay.dec = 0
+        corrections = np.divide(
+            pdg_BFs,
+            decaydec_BFs,
+            out=unp.uarray(np.ones_like(pdg_BFs), np.zeros_like(pdg_BFs)),
+            where=decaydec_BFs != 0,
+        )
 
         self.central_values = list(unp.nominal_values(corrections))
         # FIXME this will fail for 2D corrections
