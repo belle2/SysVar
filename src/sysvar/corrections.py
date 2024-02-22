@@ -196,6 +196,15 @@ class BFCorrection:
             }
         )
 
+        self.info = info
+
+    @property
+    def queries(self):
+        return [
+            f"{self.dependant_variable} == {mode['dmID']}"
+            for mode in self.info["modes"].values()
+        ]
+
 
 def add_weights_to_dataframe(
     df: DataFrame,
