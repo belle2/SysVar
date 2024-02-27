@@ -196,6 +196,8 @@ class BFCorrection:
             }
         )
 
+        self.total_error = unp.std_devs(corrections)
+
         self.info = info
 
     @property
