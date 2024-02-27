@@ -19,6 +19,7 @@ from sysvar.corrections import Correction, BFCorrection
 from sysvar.uncertainties import Uncertainty
 from sysvar.variations import Variator
 from sysvar.templates import Template
+from sysvar.eigendecomposer import EigenDecomposer
 
 
 PALETTE = sns.color_palette("colorblind")
@@ -884,6 +885,93 @@ class FFModelVisualizer(Visualizer):
         self.annotate_matrix_plot(ax[1])
 
         return fig, ax
+
+
+class EigenDecomposerVisualizer(Visualizer):
+    def __init__(
+        self,
+        instance: EigenDecomposer,
+        namespace: list,
+        top_dir: str,
+        dir_spec: Union[str, None] = None,
+        extra_ext: Union[str, Iterable, None] = None,
+        save: bool = False,
+    ):
+        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+
+    def plot_cov_matrix(self):
+        pass
+
+    def annotate_matrix_plot(self, ax: Axes):
+
+        if isinstance(ax, Axes):
+            self._annotate_axis(ax)
+        elif isinstance(ax, np.ndarray):
+            for axis in ax:
+                self._annotate_axis(ax)
+
+    def _annotate_axis(self, ax):
+
+        ax.set_xlabel("Templates/Bins")
+        ax.set_ylabel("Templates/Bins")
+
+    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        sns.heatmap(
+            self.instance.corr,
+            ax=ax,
+            cbar_kws={"label": "Pearson coeff."},
+            cmap="Blues",
+            vmin=0,
+            vmax=1,
+        )
+        ax.set_title("Correlation matrix")
+
+        return ax
+
+    def plot_eigenvalues(self, ax: Union[np.ndarray, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        x = np.arange(self.instance.eigen_values.shape[0])
+
+        ax.plot(x, self.instance.eigen_values, linestyle="", marker=".", color="black")
+
+        ax.set_yscale("log")
+        ax.set_ylabel("Eigenvalues")
+        ax.set_xlabel("Eigendirection")
+
+        ax.text(
+            x[-1] / 1.5,
+            self.instance.precision + 0.02,
+            f"Arb. threshold set: {self.instance.precision}",
+            color="#07529aff",
+        )
+
+        ax.text(
+            x[-1] / 2,
+            np.max(self.instance.eigen_values),
+            f"Keeping {self.instance.N_important_dims}/{x[-1]+1} eigendirections",
+            color="#eab90cff",
+        )
+
+        ax_right = ax.twinx()
+
+        # FIXME this is wrong and misleading.
+        # The two axes are not aligned
+        ax_right.plot(
+            x,
+            self.instance.max_differences / self.instance.cov.max(),
+            color="white",
+            alpha=0,
+        )
+        ax_right.axhline(self.instance.precision, color="#07529aff")
+        ax_right.set_yscale("log")
+        ax_right.set_ylabel(r"max($\frac{|Cov - Cov^{'}|}{Cov}$)", color="#07529aff")
 
 
 def get_latex_symbol(key):
