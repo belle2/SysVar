@@ -7,7 +7,7 @@ from pandas import DataFrame
 
 import uproot
 
-from sysvar.corrections import Correction
+from sysvar.corrections import Correction, BFCorrection
 from sysvar.variations import Variator
 from sysvar.templates import Template2D
 
@@ -26,7 +26,11 @@ class EigenDecomposer:
         self.settings = settings
         self.syst_effect = syst_effect
 
-        self.correction = Correction(
+        if settings["systematics"][syst_effect]["BF"]:
+            correction_type = BFCorrection
+        else:
+            correction_type = Correction
+        self.correction = correction_type(
             dependant_variable=settings["systematics"][syst_effect]["var"],
             systematic=syst_effect,
             MC_production=settings["MC_prod"],
@@ -53,6 +57,14 @@ class EigenDecomposer:
     @property
     def Nbins(self) -> int:
         return np.prod([len(bins) - 1 for bins in self.settings["bins"].values()])
+
+    @property
+    def precision(self) -> float:
+        return self._precision
+
+    @precision.setter
+    def precision(self, precision):
+        self._precision = precision
 
     def _get_varied_templates(self):
 
@@ -135,16 +147,18 @@ class EigenDecomposer:
     def var2cov(mat) -> np.ndarray:
         return np.outer(mat, mat)
 
-    def find_important_eigendimension_indices(self, precision: float = 0.01):
+    def find_important_eigendimension_indices(self):
 
-        important_dims = np.asarray(self.max_differences) / self.cov.max() > precision
+        important_dims = (
+            np.asarray(self.max_differences) / self.cov.max() > self.precision
+        )
 
         self.N_important_dims = np.sum(important_dims)
         self.important_dims_indices = important_dims
         logging.info(
             f"Found that %s eigendirections matter for %s per cent precision",
             self.N_important_dims,
-            precision,
+            self.precision,
         )
 
     def _get_unrolled_variations(self):
