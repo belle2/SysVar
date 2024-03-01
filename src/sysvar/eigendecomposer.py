@@ -71,11 +71,15 @@ class EigenDecomposer:
         varied_templates = []
         for reco_mode in self.decay_modes:
             logging.info("Building in reco region %s", str(reco_mode[1]))
-            reco_df = self.df.query("Bsig_dmID in @reco_mode[0]")
+            reco_df = self.df.query(
+                f"{self.settings['region_id_column']} in @reco_mode[0]"
+            )
             for fit_ctgy in self.fit_ctgies:
                 logging.info("Building template %s", str(fit_ctgy))
 
-                tmp_df = reco_df.query(f"fit_ctgy == {fit_ctgy}")
+                tmp_df = reco_df.query(
+                    f"{self.settings['ctgy_id_column']} == {fit_ctgy}"
+                )
                 # Skip template create if the query yields an empty dataframe
                 if len(tmp_df) < 1:
                     continue
