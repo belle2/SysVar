@@ -202,10 +202,17 @@ class BFCorrection:
 
     @property
     def queries(self):
-        return [
-            f"{self.dependant_variable} == {mode['dmID']}"
-            for mode in self.info["modes"].values()
-        ]
+        # PATCH
+        if self.dependant_variable in ["hadronic_prompt_mcID", "double_charm_mcID"]:
+            return [
+                f"{self.dependant_variable} == '{mode['dmID']}'"
+                for mode in self.info["modes"].values()
+            ]
+        else:
+            return [
+                f"{self.dependant_variable} == {mode['dmID']}"
+                for mode in self.info["modes"].values()
+            ]
 
 
 def add_weights_to_dataframe(
