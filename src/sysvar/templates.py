@@ -198,16 +198,18 @@ class Template2D(Template):
             if index == "MC":
                 weights = np.square(self.df[self.total_weight])
             elif index in ["up", "down"]:
-                weights = (self.df[self.total_weight] / self.df[self.syst_weight]) * (
-                    self.df["_".join((self.syst_weight, index))]
-                )
+                # PATCH
+                # Now I'm replacing 0s with 1s to avoid NANs in the histogram
+                weights = (
+                    self.df[self.total_weight] / self.df[self.syst_weight].replace(0, 1)
+                ) * (self.df["_".join((self.syst_weight, index))])
             else:
                 raise NotImplementedError("only MC, up and down variations implemented")
 
         else:
             # Divide with the nominal systematic weight and multiply with the varied one
             weights = np.array(
-                (self.df[self.total_weight] / self.df[self.syst_weight])
+                (self.df[self.total_weight] / self.df[self.syst_weight].replace(0, 1))
                 * self.df[f"{self.syst_weight}_var_{index}"]
             )
 
