@@ -73,6 +73,14 @@ class EigenDecomposer:
         # This avoids inconsistencies when creating the templates and when saving them
         return itertools.product(self.decay_modes, self.fit_ctgies)
 
+    @property
+    def enumerated_iterator(self) -> itertools.product:
+        # Making this a propery to ensure that the iterations are always the same
+        # This avoids inconsistencies when creating the templates and when saving them
+        return itertools.product(
+            enumerate(self.decay_modes), enumerate(self.fit_ctgies)
+        )
+
     @cached_property
     def nominal_hist(self) -> np.ndarray:
         return np.vstack([x.make_hist()[0] for x in self.templates])
@@ -103,7 +111,7 @@ class EigenDecomposer:
 
     @property
     def eigen_variations(self) -> np.ndarray:
-        return self.eigen_vectors * np.sqrt(self.eigen_values)
+        return np.real(self.eigen_vectors * np.sqrt(self.eigen_values))
 
     @cached_property
     def max_differences(self) -> list:
@@ -218,5 +226,47 @@ class EigenDecomposer:
                 logging.info("Saving Nominal %s in TBranch: %s", str(ctgy), branch_name)
 
                 newfile[branch_name] = t.make_hist()
+
+                previous_tree = tree
+
+    def save_template_variations(self):
+
+        variations = self._get_unrolled_variations()
+
+        with uproot.update(self.settings["filename"]) as newfile:
+            logging.info("Updating file with uproot: %s", self.settings["filename"])
+
+            previous_tree = None
+
+            for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
+                self.enumerated_iterator, self.templates
+            ):
+
+                if tree != previous_tree:
+                    logging.info("########## Reco channel: %s ##########", str(tree[1]))
+
+                nominal = t.make_hist()
+
+                for n_var in range(self.N_important_dims):
+
+                    var = variations[tree_i, ctgy_i, :, n_var]
+
+                    branch_name = self._get_TBranch_name(
+                        tree[1], ctgy, f"{self.syst_effect}_var{n_var+1}_up"
+                    )
+                    logging.info(
+                        "Saving Variation of %s in TBranch: %s", str(ctgy), branch_name
+                    )
+
+                    newfile[branch_name] = nominal[0] + var, nominal[1]
+
+                    branch_name = self._get_TBranch_name(
+                        tree[1], ctgy, f"{self.syst_effect}_var{n_var+1}_down"
+                    )
+                    logging.info(
+                        "Saving Variation of %s in TBranch: %s", str(ctgy), branch_name
+                    )
+
+                    newfile[branch_name] = nominal[0] - var, nominal[1]
 
                 previous_tree = tree
