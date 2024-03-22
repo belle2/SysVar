@@ -37,10 +37,7 @@ class Variator(ABC):
 
         self.correction = correction
         self.Nvar = Nvar
-
-    @property
-    def variations(self) -> np.ndarray:
-        return self.get_correction_variations()
+        self.variations = self.get_correction_variations()
 
     @property
     def cov_matrix(self) -> np.ndarray:
