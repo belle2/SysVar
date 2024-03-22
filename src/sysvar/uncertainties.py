@@ -130,6 +130,76 @@ class FullyCorrelatedUncertainty(Uncertainty):
         return np.diag(self.errors) @ self.corr_matrix @ np.diag(self.errors)
 
 
+class FullyCorrelatedUncertaintyInParts(Uncertainty):
+    """
+    Represents a fully correlated uncertainty only in parts with a name and error values.
+
+    This class inherits from the Uncertainty base class and implements a fully correlated
+    uncertainty with a correlation matrix that is full of ones in some regions and
+    completely uncorrelated in other regions
+
+    Args:
+        name (str): The name of the uncertainty.
+        errors (Iterable): An iterable containing the error values.
+        part = dimensions (Iterable): dimensions of correlated/uncorrelated parts
+
+    Attributes:
+        name (str): The name of the uncertainty.
+        errors (np.ndarray): An array containing the error values.
+        cov_matrix (np.ndarray): The covariance matrix of the uncertainty.
+        corr_matrix (np.ndarray): The correlation matrix of the uncertainty.
+
+    """
+
+    def __init__(
+        self, name: str, errors: Iterable, string_boundaries: List, part_dimensions
+    ):
+        """
+        Initialize a FullyCorrelatedUncertainty instance with a name and error values.
+
+        Args:
+            name (str): The name of the uncertainty.
+            errors (Iterable): An iterable containing the error values.
+
+        """
+
+        self.part_dimensions = part_dimensions
+        self.corr_matrix = self.build_correlation_matrix()
+        super().__init__(name, np.array(errors), string_boundaries)
+
+    def build_correlation_matrix(self):
+
+        # Initialize the matrix with zeros
+        matrix = np.zeros((sum(self.part_dimensions), sum(self.part_dimensions)))
+
+        # Track the starting row and column indices for each part
+        row_start = 0
+        col_start = 0
+
+        # Iterate over each part
+        for part_dim in self.part_dimensions:
+            # Assign values to the current part
+            matrix[
+                row_start : row_start + part_dim, col_start : col_start + part_dim
+            ] = 1
+
+            # Update starting row and column indices for the next part
+            row_start += part_dim
+            col_start += part_dim
+
+        return matrix
+
+    def build_covariance(self) -> np.ndarray:
+        """
+        Build the covariance matrix of the fully correlated uncertainty.
+
+        Returns:
+            np.ndarray: The covariance matrix of the uncertainty.
+
+        """
+        return np.diag(self.errors) @ self.corr_matrix @ np.diag(self.errors)
+
+
 class UncorrelatedUncertainty(Uncertainty):
     """
     Represents an uncorrelated uncertainty with a name and error values.
