@@ -8,7 +8,7 @@ from typing import Union
 import numpy as np
 from pandas import DataFrame
 
-from sysvar.corrections import Correction
+from sysvar.corrections import BaseCorrection
 from sysvar.variations import Variator
 
 
@@ -31,7 +31,7 @@ class Template(ABC):
         binning: dict,
         total_weight: str,
         syst_weight: Union[None, str] = None,
-        correction: Union[None, Correction] = None,
+        correction: Union[None, BaseCorrection] = None,
         variator: Union[None, Variator] = None,
     ):
         columns = []
@@ -182,7 +182,7 @@ class Template2D(Template):
         binning: dict,
         total_weight: str,
         syst_weight: Union[None, str] = None,
-        correction: Union[None, Correction] = None,
+        correction: Union[None, BaseCorrection] = None,
         variator: Union[None, Variator] = None,
     ):
         super().__init__(df, binning, total_weight, syst_weight, correction, variator)

@@ -4,7 +4,7 @@ from typing import Iterable, Union
 
 import numpy as np
 
-from sysvar.corrections import Correction
+from sysvar.corrections import BaseCorrection
 
 # TODO should this really be an ABC ? Need to think about it...
 class Variator(ABC):
@@ -16,16 +16,16 @@ class Variator(ABC):
     of the variations coming from a specific uncertainty.
 
     Args:
-        correction (Correction): The correction object.
+        correction (BaseCorrection): The correction object.
         Nvar (int): The number of variations to be generated. Defaults to 20.
 
     Attributes:
-        correction (Correction): The correction object.
+        correction (BaseCorrection): The correction object.
         uncertainties (dict): A dictionary to store uncertainties associated with the correction.
 
     """
 
-    def __init__(self, correction: Correction, Nvar: int = 20):
+    def __init__(self, correction: BaseCorrection, Nvar: int = 20):
 
         """
         Initialize a Variator with a correction object.

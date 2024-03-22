@@ -8,7 +8,7 @@ from pandas import DataFrame
 
 import uproot
 
-from sysvar.corrections import Correction, BFCorrection
+from sysvar.corrections import BaseCorrection, BFCorrection
 from sysvar.variations import Variator
 from sysvar.templates import Template2D
 

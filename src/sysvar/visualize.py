@@ -15,7 +15,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.colors import LogNorm
 
-from sysvar.corrections import Correction, BFCorrection
+from sysvar.corrections import BFCorrection, BaseCorrection
 from sysvar.uncertainties import Uncertainty
 from sysvar.variations import Variator
 from sysvar.templates import Template
@@ -29,7 +29,7 @@ CMAP = "Blues"
 class Visualizer(ABC):
     def __init__(
         self,
-        instance: Union[Correction, Uncertainty, Variator, Template],
+        instance: Union[BaseCorrection, Uncertainty, Variator, Template],
         namespace: list,
         top_dir: str,
         dir_spec: Union[str, None, bool] = None,
@@ -197,7 +197,7 @@ class NoMatrixError(Exception):
 class CorrectionVisualizer(Visualizer):
     def __init__(
         self,
-        instance: Correction,
+        instance: BaseCorrection,
         namespace: list,
         top_dir: str,
         dir_spec: Union[str, None] = None,
