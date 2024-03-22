@@ -51,7 +51,7 @@ class Template(ABC):
         self.df = df[columns].copy(deep=True)
 
         self.correction = correction
-        self.variations = variator.variations if variator is not None else variator
+        self.variator = variator
         self.Nvar = variator.Nvar if variator is not None else variator
 
     @property
@@ -158,7 +158,7 @@ class Template(ABC):
             self.df.loc[
                 self.df.eval(q),
                 [f"{self.syst_weight}_var_{j}" for j in range(self.Nvar)],
-            ] = self.variations[:, i]
+            ] = self.variator.variations[:, i]
 
     def _get_absolute_variations(self):
         absolute_variations = np.empty((self.Nbins, self.Nvar))
