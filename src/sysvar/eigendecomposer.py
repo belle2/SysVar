@@ -1,3 +1,4 @@
+import itertools
 from functools import cached_property
 
 from tqdm import tqdm
@@ -36,7 +37,7 @@ class EigenDecomposer:
             MC_production=settings["MC_prod"],
         )
         self.variator = Variator(self.correction, Nvar=settings["Nvar"])
-        self.varied_templates = self._get_varied_templates()
+        self.templates = self._create_varied_templates()
         self.N_important_dims = 0
         self.important_dims_indices = None
 
@@ -66,50 +67,19 @@ class EigenDecomposer:
     def precision(self, precision):
         self._precision = precision
 
-    def _get_varied_templates(self):
-
-        varied_templates = []
-        for reco_mode in self.decay_modes:
-            logging.info("Building in reco region %s", str(reco_mode[1]))
-            reco_df = self.df.query(
-                f"{self.settings['region_id_column']} in @reco_mode[0]"
-            )
-            for fit_ctgy in self.fit_ctgies:
-                logging.info("Building template %s", str(fit_ctgy))
-
-                tmp_df = reco_df.query(
-                    f"{self.settings['ctgy_id_column']} == '{fit_ctgy}'"
-                )
-                # Skip template create if the query yields an empty dataframe
-                if len(tmp_df) < 1:
-                    logging.warn("Skipping template %s", str(fit_ctgy))
-                    # PATCH FIX
-                    # This just creates an empty dataframe so that Template2D doesn't fail.
-                    # Maybe it's okay to keep doing this w/o a fix
-                    tmp_df = DataFrame(0, index=np.arange(1), columns=self.df.columns)
-
-                t = Template2D(
-                    tmp_df,
-                    self.settings["bins"],
-                    self.settings["weight"],
-                    self.settings["systematics"][self.syst_effect]["weight"],
-                    self.correction,
-                    self.variator,
-                )
-
-                t.add_variations()
-
-                varied_templates.append(t)
-
-        return varied_templates
+    @property
+    def iterator(self) -> itertools.product:
+        # Making this a propery to ensure that the iterations are always the same
+        # This avoids inconsistencies when creating the templates and when saving them
+        return itertools.product(self.decay_modes, self.fit_ctgies)
 
     @cached_property
     def nominal_hist(self) -> np.ndarray:
-        return np.vstack([x.make_hist()[0] for x in self.varied_templates])
+        return np.vstack([x.make_hist()[0] for x in self.templates])
 
     @cached_property
     def combined_variations(self) -> np.ndarray:
-        return np.vstack([x._get_absolute_variations() for x in self.varied_templates])
+        return np.vstack([x._get_absolute_variations() for x in self.templates])
 
     @property
     def cov(self) -> np.ndarray:
@@ -155,6 +125,49 @@ class EigenDecomposer:
     def var2cov(mat) -> np.ndarray:
         return np.outer(mat, mat)
 
+    def _create_varied_templates(self):
+
+        previous_reco_mode = None
+        varied_templates = []
+        for reco_mode, fit_ctgy in self.iterator:
+
+            if reco_mode != previous_reco_mode:
+                logging.info(
+                    "########## Reco channel: %s ##########", str(reco_mode[1])
+                )
+
+            tmp_df = self.df.query(
+                f"{self.settings['region_id_column']} in @reco_mode[0] & {self.settings['ctgy_id_column']} == '{fit_ctgy}'"
+            )
+            # Skip template create if the query yields an empty dataframe
+            if len(tmp_df) < 1:
+                logging.warn("Skipping template %s", str(fit_ctgy))
+                # PATCH FIX
+                # This just creates an empty dataframe so that Template2D doesn't fail.
+                # Maybe it's okay to keep doing this w/o a fix
+                tmp_df = DataFrame(0, index=np.arange(1), columns=self.df.columns)
+
+            # FIX this defaults to Template2D logging. Make it more generic
+            t = Template2D(
+                tmp_df,
+                self.settings["bins"],
+                self.settings["weight"],
+                self.settings["systematics"][self.syst_effect]["weight"],
+                self.correction,
+                self.variator,
+            )
+            # FIX this defaults to Template2D logging. Make it more generic
+            if not len(tmp_df) < 1:
+                logging.info("Building %s for %s", str(type(t).__name__), str(fit_ctgy))
+
+            t.add_variations()
+
+            varied_templates.append(t)
+
+            previous_reco_mode = reco_mode
+
+        return varied_templates
+
     def find_important_eigendimension_indices(self):
 
         important_dims = (
@@ -182,3 +195,28 @@ class EigenDecomposer:
         return self.nominal_hist.reshape(
             len(self.decay_modes), len(self.fit_ctgies), self.Nbins
         )
+
+    @staticmethod
+    def _get_TBranch_name(*args):
+        return "/".join(args)
+
+    def save_nominal_templates(self):
+
+        # FIX there needs to be a check here to not recreate the file if it already exists or has nominal templates.
+        # Now the user needs to be careful to not mess up the file and lose previously written nominals
+        with uproot.recreate(self.settings["filename"], compression=None) as newfile:
+            logging.info("Recreate file with uproot: %s", self.settings["filename"])
+
+            previous_tree = None
+
+            for (tree, ctgy), t in zip(self.iterator, self.templates):
+
+                if tree != previous_tree:
+                    logging.info("########## Reco channel: %s ##########", str(tree[1]))
+
+                branch_name = self._get_TBranch_name(tree[1], ctgy, "Nominal")
+                logging.info("Saving Nominal %s in TBranch: %s", str(ctgy), branch_name)
+
+                newfile[branch_name] = t.make_hist()
+
+                previous_tree = tree
