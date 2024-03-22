@@ -197,7 +197,12 @@ class Template2D(Template):
         elif isinstance(index, str):
             if index == "MC":
                 weights = np.square(self.df[self.total_weight])
-            elif index in ["up", "down"]:
+            # FIXME This needs to be safely generalized
+            elif (
+                index in ["up", "down"]
+                or index in [f"up{x}" for x in range(9)]
+                or index in [f"down{x}" for x in range(9)]
+            ):
                 # PATCH
                 # Now I'm replacing 0s with 1s to avoid NANs in the histogram
                 weights = (
