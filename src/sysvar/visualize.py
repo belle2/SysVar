@@ -23,6 +23,7 @@ from sysvar.eigendecomposer import EigenDecomposer
 
 
 PALETTE = sns.color_palette("colorblind")
+CMAP = "Blues"
 
 
 class Visualizer(ABC):
@@ -287,10 +288,12 @@ class UncertaintyVisualizer(Visualizer):
         ax.set_xticks(
             np.arange(len(self.instance.string_boundaries)),
             self.instance.string_boundaries,
+            rotation=45,
         )
         ax.set_yticks(
             np.arange(len(self.instance.string_boundaries)),
             self.instance.string_boundaries,
+            rotation=-45,
         )
 
     def plot_cov_matrix(self, ax: Union[Axes, None] = None):
@@ -303,7 +306,7 @@ class UncertaintyVisualizer(Visualizer):
             ax=ax,
             annot=True,
             cbar_kws={"label": "Covariance"},
-            cmap="Blues",
+            cmap=CMAP,
         )
         ax.set_title("Covariance matrix")
 
@@ -319,7 +322,7 @@ class UncertaintyVisualizer(Visualizer):
             ax=ax,
             annot=True,
             cbar_kws={"label": "Pearson coeff."},
-            cmap="Blues",
+            cmap=CMAP,
             vmin=0,
             vmax=1,
         )
@@ -383,7 +386,7 @@ class VariationVisualizer(Visualizer):
             ax=ax,
             annot=True,
             cbar_kws={"label": "Covariance"},
-            cmap="Blues",
+            cmap=CMAP,
         )
         ax.set_title("Covariance matrix")
 
@@ -399,7 +402,7 @@ class VariationVisualizer(Visualizer):
             ax=ax,
             annot=True,
             cbar_kws={"label": "Pearson coeff."},
-            cmap="Blues",
+            cmap=CMAP,
             vmin=0,
             vmax=1,
         )
@@ -477,7 +480,7 @@ class VariationVisualizer(Visualizer):
 
         return fig, ax
 
-    def plot_relative_variations_in_grid(self, nbins: int = 20):
+    def plot_relative_variations_in_grid(self, nbins: int = 21):
 
         counts = []
         bin_edges = []
@@ -498,7 +501,7 @@ class VariationVisualizer(Visualizer):
 
         fig, ax = plt.subplots(figsize=(5, 10))
 
-        cb = ax.matshow(np.array(counts).T)
+        cb = ax.matshow(np.array(counts).T, cmap=CMAP)
         plt.colorbar(cb)
 
         ax.set_xticks(np.arange(len(self.strings)), self.strings, rotation=90)
@@ -550,7 +553,7 @@ class TemplateVisualizer(Visualizer):
             annot=True,
             fmt=".2f",
             cbar_kws={"label": "Covariance"},
-            cmap="Blues",
+            cmap=CMAP,
             norm=LogNorm(),
             vmin=0.0001,
             vmax=100,
@@ -570,7 +573,7 @@ class TemplateVisualizer(Visualizer):
             annot=True,
             fmt=".2f",
             cbar_kws={"label": "Pearson coeff."},
-            cmap="Blues",
+            cmap=CMAP,
             vmin=0,
             vmax=1,
         )
@@ -801,7 +804,7 @@ class FFModelVisualizer(Visualizer):
             ax=ax,
             annot=True,
             cbar_kws={"label": "Covariance"},
-            cmap="Blues",
+            cmap=CMAP,
         )
         ax.set_title("Covariance matrix")
         self.annotate_matrix_plot(ax)
@@ -818,7 +821,7 @@ class FFModelVisualizer(Visualizer):
             ax=ax,
             annot=True,
             cbar_kws={"label": "Pearson coeff."},
-            cmap="Blues",
+            cmap=CMAP,
             vmin=0,
             vmax=1,
         )
@@ -924,7 +927,7 @@ class EigenDecomposerVisualizer(Visualizer):
             self.instance.corr,
             ax=ax,
             cbar_kws={"label": "Pearson coeff."},
-            cmap="Blues",
+            cmap=CMAP,
             vmin=0,
             vmax=1,
         )
@@ -972,6 +975,36 @@ class EigenDecomposerVisualizer(Visualizer):
         ax_right.axhline(self.instance.precision, color="#07529aff")
         ax_right.set_yscale("log")
         ax_right.set_ylabel(r"max($\frac{|Cov - Cov^{'}|}{Cov}$)", color="#07529aff")
+
+    def plot_cov_diff(self, ax: Union[np.ndarray, None] = None):
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+
+        x = np.arange(self.instance.eigen_values.shape[0])
+
+        ax.plot(
+            x,
+            self.instance.max_differences / self.instance.cov.max(),
+            linestyle="",
+            marker=".",
+            color="black",
+        )
+
+        ax.set_yscale("log")
+        ax.set_ylabel(r"max($\frac{|Cov - Cov^{'}|}{Cov}$)")
+        ax.set_xlabel("Eigendirection")
+
+        ax.text(
+            x[-1] / 2,
+            np.max(self.instance.max_differences / self.instance.cov.max()),
+            f"Keeping {self.instance.N_important_dims}/{x[-1]+1} eigendirections",
+            color="#eab90cff",
+        )
+
+        ax.fill_between(
+            [-10, x[-1]], self.instance.precision, 1, alpha=0.5, color="#07529aff"
+        )
 
 
 def get_latex_symbol(key):
