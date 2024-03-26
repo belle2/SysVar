@@ -3,7 +3,7 @@ import uproot
 from sysvar.utils import read_yaml
 
 from sysvar.templates import Template2D
-from sysvar.corrections import Correction, BFCorrection
+from sysvar.corrections import Correction
 from sysvar.variations import Variator
 from sysvar.eigendecomposer import EigenDecomposer
 from sysvar.visualize import EigenDecomposerVisualizer

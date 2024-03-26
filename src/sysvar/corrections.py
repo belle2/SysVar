@@ -227,7 +227,7 @@ class Correction2DCategorical(BaseCorrection):
 
 
 @dataclass
-class BFCorrection:
+class CorrectionBF:
 
     dependant_variable: Union[str, None] = None
     central_values: Iterable = None

@@ -8,7 +8,7 @@ from typing import Union
 import numpy as np
 from pandas import DataFrame
 
-from sysvar.corrections import BaseCorrection
+from sysvar.corrections import BaseCorrection, Correction2DCategorical
 from sysvar.variations import Variator
 
 
@@ -46,8 +46,18 @@ class Template(ABC):
             columns.append(syst_weight)
         self.syst_weight = syst_weight
         # Make a deep copy only of the columns that are needed
-        if correction is not None:
+        # PATCH, FIXME
+        if not isinstance(correction, Correction2DCategorical):
+            print("1")
+            print(columns)
             columns.append(correction.dependant_variable)
+        else:
+            print("2")
+            print(columns)
+            columns.append(correction.categorical_variable)
+            columns.append(correction.continuus_variable)
+            print("3")
+            print(columns)
         self.df = df[columns].copy(deep=True)
 
         self.correction = correction
