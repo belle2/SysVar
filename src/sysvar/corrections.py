@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Iterable, Union
+from typing import List, Iterable, Union, Optional
+from os import path
 
 from particle import Particle
 
 import itertools
 import numpy as np
-from pandas import DataFrame
+from pandas import DataFrame, concat, read_csv
 from uncertainties import unumpy as unp, ufloat
 
 from sysvar.uncertainties import (
@@ -359,3 +360,321 @@ def combine_weights(
     elif new_weight not in df.columns:
         logging.info("%s does not exist. Adding it to dataframe", new_weight)
         df.loc[:, new_weight] = df[weights].prod(axis=1)
+
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import List, Iterable, Union, Optional
+from os import path
+
+from particle import Particle
+
+import itertools
+import numpy as np
+from pandas import DataFrame, concat, read_csv
+from uncertainties import unumpy as unp, ufloat
+
+
+class CorrectionTableFinder:
+
+    """
+    Factory method class to get correction tables for kaons,  pions, electrons and muons
+    """
+
+    def __init__(
+        self,
+        particle_species,
+        online_cut,
+        base_table_path,
+        variable
+    ):
+        self.particle_species = particle_species
+        self.online_cut = online_cut
+        self.base_table_path = base_table_path
+        self.variable = variable
+
+        self.true_pdg = (self.particle_species_settings[particle_species]["true_pdgs"],)
+        self.fake_pdg = (self.particle_species_settings[particle_species]["fake_pdgs"],)
+
+        self.value = self.get_cut_value()
+        self.cut_type = self.get_cut_type()
+
+        efficiency_table_names = self.build_table_name(
+            self.particle_species_settings[self.particle_species]["eff_table_ids"]
+        )
+        fake_rate_table_names = self.build_table_name(
+            self.particle_species_settings[self.particle_species]["fake_rate_table_ids"]
+        )
+
+        self.eff_table = self.get_table(efficiency_table_names)
+        self.fake_table = self.get_table(fake_rate_table_names)
+
+
+    @classmethod
+    def kaons(cls, external_info):
+
+        particle_species = "kaon"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable = None
+        )
+
+    @classmethod
+    def kaons(cls, external_info):
+
+        particle_species = "kaon"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable = None
+        )
+
+    @classmethod
+    def pions(cls, external_info):
+
+        particle_species = "pion"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable = None
+        )
+
+    @classmethod
+    def electrons(cls, external_info):
+
+        particle_species = "elec"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable = external_info["variable"]
+        )
+
+    @classmethod
+    def muons(cls, external_info):
+
+        particle_species = "muon"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable = external_info["variable"]
+        )
+
+    @property
+    def particle_species_settings(self) -> dict:
+
+        return {
+            "kaon": {
+                "true_pdgs": [321],
+                "fake_pdgs": [211],
+                "eff_table_ids": ["keff"],
+                "fake_rate_table_ids": ["piFk"],
+            },
+            "pion": {
+                "true_pdgs": 211,
+                "fake_pdgs": 321,
+                "eff_table_ids": ["pieff"],
+                "fake_rate_table_ids": ["kFpi"],
+            },
+            "elec": {
+                "true_pdgs": [11],
+                "fake_pdgs": [321, 211],
+                "eff_table_ids": ["e_efficiency"],
+                "fake_rate_table_ids": [
+                    "K_e_fakeRate",
+                    "pi_e_fakeRate",
+                ],
+            },
+            "muon": {
+                "true_pdgs": [13],
+                "fake_pdgs": [321, 211],
+                "eff_table_ids": ["mu_efficiency"],
+                "fake_rate_table_ids": [
+                    "K_mu_fakeRate",
+                    "pi_mu_fakeRate",
+                ],
+            },
+        }
+
+    def get_cut_type(
+        self,
+    ) -> str:
+        """Reads the yaml configuration file and extracts the cut type that have been applied in the online reconstuction
+
+        Args:
+        species: Particle species, should be K+ or pi+
+
+        Returns:
+        the cut type that has been applied online. Binary or global
+        """
+        # Read the online selections that have been applied on the online reconstruction
+        # TODO update this to the config file of each experiment to avoid making the mistake of
+        # changing the value during the offline preproccesing
+
+        if self.particle_species in ["muon", "elec"]:
+            cut_type = self.online_cut
+
+        elif self.particle_species in ["kaon", "pion"]:
+            if "binaryPID" in self.online_cut:
+                cut_type = "B"
+
+            elif "ID" in self.online_cut:
+                cut_type = "G"
+            else:
+                logging.warning(
+                    "Cut type, neither global, nor binary HID selection has been applied online"
+                )
+        else:
+            raise ValueError("Wrong particle species")
+
+        return cut_type
+
+    def get_cut_value(self) -> str:
+        """Reads the yaml configuration file and extracts the cut type that have been applied in the online reconstuction
+
+        Args:
+        species: Particle species, should be K+ or pi+
+
+        Returns:
+        the cut type that has been applied online. Binary or global
+        """
+        # Read the online selections that have been applied on the online reconstruction
+        # TODO update this to the config file of each experiment to avoid making the mistake of
+        # changing the value during the offline preproccesing
+        if self.particle_species in ["muon", "elec"]:
+            cut_value = self.online_cut[-1]
+
+        elif self.particle_species in ["kaon", "pion"]:
+            cut_value = self.online_cut[-3:]
+
+        return self.online_cut[-1]
+
+    def build_table_name(
+        self,
+        table_ids: str,
+    ) -> list:
+        """Builds the efficiency and fake rate tables path names
+
+        Args:
+        table_ids: efficiency or fake table id
+
+        Returns:
+        list with the efficiency or fake rate table file names
+        """
+        # Create the file names.
+        # These are both for plus and minus
+        if self.particle_species in ["kaon", "pion"]:
+            # First build the names for positive charge
+            file_names = [self.build_hid_table_name(x, "p") for x in table_ids]
+            # Now add thhe names for negative charge
+            file_names.extend([self.build_hid_table_name(x, "m") for x in table_ids])
+
+        elif self.particle_species in ["elec", "muon"]:
+            file_names = ["_".join((x, "table.csv")) for x in table_ids]
+
+        return [path.join(self.base_table_path, x) for x in file_names]
+
+    def build_hid_table_name(self, table_id, charge):
+        return "_".join(
+            (
+                "Rdtmc",
+                table_id,
+                charge,
+                self.cut_type + "0-" + str(self.value)[-1],
+                "all.log",
+            )
+        )
+
+    def get_table(self, table_names):
+
+        if self.particle_species in ["kaon", "pion"]:
+            table = concat([read_csv(x) for x in table_names])
+            table = table.reset_index(drop=True)
+            self.make_pidvar_compatible(table, max_uncertainty=10)
+
+        elif self.particle_species in ["elec", "muon"]:
+            table = concat([read_csv(x) for x in table_names])
+            table = table.query(self.get_lid_queries())
+
+        return table
+
+    @staticmethod
+    def make_pidvar_compatible(
+        table: DataFrame, max_uncertainty: Optional[float] = 1e2
+    ):
+        """
+        Convert the pandas dataframes obtained Hadron ID CSV tables via into a
+        format consistent with the format of the lepton ID tables which ``PIDvar``
+        understands.
+
+        In particular, convert the ``charge`` column from ``1``/``-1`` integer
+        entries to ``+``/``-`` string entries and calculate the
+        ``theta_min``/``theta_max`` columns.
+
+        :param table: Pandas dataframe obtained from ``pandas.read_csv`` on HID table
+
+        :param inplace: Whether to modify the existing dataframe in place.
+            Otherwise, a copy of the existing dataframe will be returned.
+
+        :param max_uncertainty: Drop rows in HID tables where any of the data-MC
+            uncertainties (sys/stat up/down) exceed this value. Rationale: The HID
+            tables contain rows with nonsense uncertainties > 10⁸, so it is meant to
+            remove those entries. Therefore, the exact value is not important. Set
+            to ``None`` to disable dropping any columns.
+
+        :return: Modified dataframe that can be used by ``PIDvar``.
+        """
+
+        # Some checks that table has expected format of Hadron ID tables
+        if not set(table["charge"]).issubset({1, -1}):
+            raise ValueError(
+                "Expected that the ``charge`` entries of the original Hadron ID dataframe consists"
+                + "only of ``1`` and ``-1``, but it contains {}".format(
+                    set(table["charge"])
+                )
+            )
+
+        if "theta_min" in table or "theta_max" in table:
+            raise ValueError("Dataframe already has ``theta_…`` columns")
+
+        if max_uncertainty is not None:
+            unc_cols = [
+                "data_MC_uncertainty_stat_up",
+                "data_MC_uncertainty_stat_dn",
+                "data_MC_uncertainty_sys_up",
+                "data_MC_uncertainty_sys_dn",
+            ]
+            table = table[table[unc_cols].max(axis=1) <= max_uncertainty]
+            # for θ in [0, π], cos(θ) is strictly decreasing, so we have invert min and max when inverting the cosine
+        table.loc[:, "theta_min"] = np.arccos(table["cos_max"].copy(deep=True))
+        table.loc[:, "theta_max"] = np.arccos(table["cos_min"].copy(deep=True))
+
+        # PIDvar expects charge columns to contain + or -
+        table.loc[:, "charge"] = np.where(table["charge"] == +1, "+", "-")
+
+    def get_lid_queries(self):
+
+        working_point = f"(working_point == '{self.cut_type}')"
+
+        best_available = "(is_best_available == True)"
+
+        if self.particle_species == "elec":
+            exclude_bins = "(not ((theta_min == 0.56 and theta_max == 2.23) or (theta_min == 0.22 and theta_max == 2.71) or (p_min == 0.2 and p_max == 7) or (p_min == 0.2 and p_max == 5)))"
+
+        elif self.particle_species == "muon":
+
+            exclude_bins = "(not ((theta_min == 0.82 and theta_max == 2.22) or (theta_min == 0.4 and theta_max == 0.82) or (theta_min == 0.4 and theta_max == 2.6) or (p_min == 0.2 and p_max == 5)))"
+
+        variable = f"(variable == '{self.variable}')"
+
+        return " and ".join((working_point, best_available, exclude_bins, variable))
