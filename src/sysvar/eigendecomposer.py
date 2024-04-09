@@ -243,6 +243,12 @@ class EigenDecomposer:
 
                 newfile[branch_name] = t.make_hist()
 
+                if f"{tree}/Data/Nominal" not in newfile.keys():
+                    logging.info("Adding empty Data for region: %s", tree[1])
+                    # Save empty data now as we work only on Asimov
+                    newfile[f"{tree[1]}/Data/Nominal"] = np.array([0, 0, 0]), np.array(
+                        [0, 1, 2, 3]
+                    )
                 previous_tree = tree
 
     def save_template_variations(self):
