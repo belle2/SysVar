@@ -48,16 +48,11 @@ class Template(ABC):
         # Make a deep copy only of the columns that are needed
         # PATCH, FIXME
         if not isinstance(correction, Correction2DCategorical):
-            print("1")
-            print(columns)
             columns.append(correction.dependant_variable)
         else:
-            print("2")
-            print(columns)
             columns.append(correction.categorical_variable)
             columns.append(correction.continuus_variable)
-            print("3")
-            print(columns)
+            columns.extend(correction.extra_variables)
         self.df = df[columns].copy(deep=True)
 
         self.correction = correction
