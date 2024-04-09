@@ -74,7 +74,6 @@ class BaseCorrection(ABC):
             return unp.std_devs(self.central_values)
 
     def add_uncertainty(self, unc: Uncertainty) -> None:
-
         """
         Add an uncertainty to the Correction.
 
@@ -178,6 +177,8 @@ class Correction2DCategorical(BaseCorrection):
         self.continuus_variable = self.info["continuus_variable"]
         self.continuus_edges = self.info["continuus_edges"]
 
+        self.extra_variables = self.info["extra_variables"]
+
         # Add the fully correlated uncertainties
         if "fully_correlated" in self.info.keys():
             for unc_name, unc_lists in self.info["fully_correlated"].items():
@@ -221,9 +222,12 @@ class Correction2DCategorical(BaseCorrection):
     @property
     def queries(self):
         return [
-            f"{self.categorical_variable} == {cv} & {low} <= {self.continuus_variable} < {up}"
+            f"{self.categorical_variable} == {cv} & {low} <= {self.continuus_variable} < {up} & {self._get_extra_cut()}"
             for cv, (low, up) in self.iterator
         ]
+
+    def _get_extra_cut(self):
+        return self.info["extra_cut"]
 
 
 @dataclass
@@ -302,7 +306,6 @@ def add_weights_to_dataframe(
     weightname: str,
     overwrite: bool = False,
 ):
-
     """
     Add weights to a DataFrame based on a correction object.
 
