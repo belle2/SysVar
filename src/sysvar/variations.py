@@ -63,6 +63,16 @@ class Variator(ABC):
         std_devs = np.sqrt(np.diag(self.cov_matrix))
         return self.cov_matrix / np.outer(std_devs, std_devs)
 
+    @property
+    def relative_variations(self) -> np.ndarray:
+
+        return np.divide(
+            self.variations,
+            np.array(self.correction.central_values),
+            out=np.zeros_like(self.variations),
+            where=np.array(self.correction.central_values) != 0,
+        )
+
     def generate_variations(self, Nvar: int, covariance: np.ndarray) -> np.ndarray:
         """
         Generate variations based on a covariance matrix.

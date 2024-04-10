@@ -342,7 +342,7 @@ class VariationVisualizer(Visualizer):
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
-        self._strings = None
+        self._strings = self.instance.correction.strings
 
     @property
     def strings(self) -> list:
@@ -400,7 +400,7 @@ class VariationVisualizer(Visualizer):
         sns.heatmap(
             self.instance.corr_matrix,
             ax=ax,
-            annot=True,
+            #annot=True,
             cbar_kws={"label": "Pearson coeff."},
             cmap=CMAP,
             vmin=0,
@@ -485,16 +485,12 @@ class VariationVisualizer(Visualizer):
         counts = []
         bin_edges = []
 
-        relative_variations = (
-            self.instance.variations / self.instance.correction.central_values
-        )
-
-        min_var = np.round(np.min(relative_variations), 1)
-        max_var = np.round(np.max(relative_variations), 1)
+        min_var = np.round(np.min(self.instance.relative_variations), 1)
+        max_var = np.round(np.max(self.instance.relative_variations), 1)
 
         for i in range(len(self.instance.correction.central_values)):
             hist = np.histogram(
-                relative_variations[:, i], range=(min_var, max_var), bins=nbins
+                self.instance.relative_variations[:, i], range=(min_var, max_var), bins=nbins
             )
             counts.append(hist[0])
             bin_edges.append(hist[1])
@@ -509,7 +505,7 @@ class VariationVisualizer(Visualizer):
             np.arange(len(bin_edges[0][:-1])),
             np.round((bin_edges[0][1:] + bin_edges[0][:-1]) / 2, 3),
         )
-
+        ax.set_ylim(min_var, max_var)
         ax.set_ylabel("Relative variation")
 
         ax.invert_yaxis()
