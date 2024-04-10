@@ -34,7 +34,11 @@ class UncertaintyWithSameNameExists(Exception):
     pass
 
 
-@dataclass
+class NotValidRateType(Exception):
+    pass
+
+
+@dataclass()
 class BaseCorrection(ABC):
     systematic: str = None
     MC_production: str = None
@@ -232,7 +236,7 @@ class Correction2DCategorical(BaseCorrection):
 
 
 @dataclass
-class CorrectionBF:
+class CorrectionBF(BaseCorrection):
 
     dependant_variable: Union[str, None] = None
     central_values: Iterable = None
@@ -243,7 +247,7 @@ class CorrectionBF:
         super().__post_init__()
 
         self.central_values = self._calculate_scaling_ratios()
-        self.dependant_variable = info["general"]["dependant_variable"]
+        self.dependant_variable = self.info["general"]["dependant_variable"]
         self.string = self._create_strings()
         # Add the uncertainties as fully uncorrelated. This is a choice.
         # Can be very complicated as some of these modes may have been measured
@@ -251,16 +255,18 @@ class CorrectionBF:
         self.uncertainties.update(
             {
                 "BF uncertainty": UncorrelatedUncertainty(
-                    "BF uncertainty", list(unp.std_devs(corrections)), self.strings
+                    "BF uncertainty",
+                    list(unp.std_devs(self.central_values)),
+                    self.strings,
                 )
             }
         )
 
     def _create_strings(self) -> List[str]:
 
-        mother = Particle.from_pdgid(info["general"]["mother_particle"]).latex_name
+        mother = Particle.from_pdgid(self.info["general"]["mother_particle"]).latex_name
         daughter_pdgs = [
-            x for mode in info["modes"].values() for x in mode["daughters"]
+            x for mode in self.info["modes"].values() for x in mode["daughters"]
         ]
         strings = []
         for daughter_set in daughter_pdgs:
@@ -297,6 +303,126 @@ class CorrectionBF:
         return [
             f"{self.dependant_variable} == '{mode['dmID']}'"
             for mode in self.info["modes"].values()
+        ]
+
+
+@dataclass
+class PIDCorrection2D(BaseCorrection):
+
+    uncertainties: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        rate = self.info["rate"]
+
+        self.check_valid_rate(rate)
+        self.table = self.get_table(rate)
+        self.central_values = self._extract_central_values()
+
+        self.p = self.info["momentum_variable"]
+        self.theta = self.info["theta_variable"]
+        self.PDG = self.info["PDG_variable"]
+        self.mcPDG = self.info["mcPDG_variable"]
+
+        # Add uncertainties as fully uncorrelated. This is a conservative choice
+        error_id = "stat"
+        self.uncertainties.update(
+            {
+                f"{error_id} uncertainty": UncorrelatedUncertainty(
+                    f"{error_id} uncertainty",
+                    self._extract_errors(f"{error_id}"),
+                    self.strings,
+                )
+            }
+        )
+        error_id = "sys"
+        self.uncertainties.update(
+            {
+                f"{error_id} uncertainty": UncorrelatedUncertainty(
+                    f"{error_id} uncertainty",
+                    self._extract_errors(f"{error_id}"),
+                    self.strings,
+                )
+            }
+        )
+
+    @staticmethod
+    def check_valid_rate(rate):
+
+        valid_rates = ["eff", "fake"]
+
+        if rate not in valid_rates:
+            raise NotValidRateType(
+                f"Valid rate arguments are {*valid_rates,} but you passed {rate}"
+            )
+
+    def get_table(self, rate):
+
+        table_finders = []
+        if self.systematic == "eID":
+            table_finders.append(CorrectionTableFinder.electrons(self.info))
+        if self.systematic == "muID":
+            table_finders.append(CorrectionTableFinder.muons(self.info))
+        elif self.systematic == "kID":
+            table_finders.append(CorrectionTableFinder.kaons(self.info))
+        elif self.systematic == "piID":
+            table_finders.append(CorrectionTableFinder.pions(self.info))
+
+        eff_table = concat([x.eff_table for x in table_finders])
+        fake_rate_table = concat([x.fake_rate_table for x in table_finders])
+
+        if rate == "eff":
+            table = eff_table
+        elif rate == "fake":
+            table = fake_rate_table
+
+        # PATCH
+        # This has to be read somewhere else somehow
+        self._true_pdg = table_finders[0].fake_pdg
+
+        return table
+
+    @property
+    def true_pdg(self) -> list:
+        return self._true_pdg
+
+    @true_pdg.setter
+    def true_pdg(self, true_pdg):
+        self._true_pdg = true_pdg
+
+    @property
+    def iterator(self):
+        return self.table.iterrows()
+
+    @property
+    def queries(self):
+        return [
+            f"{row[1]['p_min']} <= {self.p} < {row[1]['p_max']} & {row[1]['theta_min']} <= {self.theta} < {row[1]['theta_max']} & {self.PDG} == {row[1]['mcPDG']} & abs({self.mcPDG}) in {self._true_pdg}"
+            for row in self.iterator
+        ]
+
+    @property
+    def strings(self):
+        return [
+            rf"{row[1]['p_min']} <= p < {row[1]['p_max']} & {row[1]['theta_min']} <= $\theta$ < {row[1]['theta_max']} & q = {row[1]['charge']}"
+            for row in self.iterator
+        ]
+
+    def _extract_central_values(self):
+        return [row[1]["data_MC_ratio"] for row in self.iterator]
+
+    def _extract_errors(self, error_type):
+
+        # this assumes symmetric errors and takes the maximum out of the two.
+        return [
+            row[1][
+                [
+                    f"data_MC_uncertainty_{error_type}_up",
+                    f"data_MC_uncertainty_{error_type}_dn",
+                ]
+            ].max()
+            for row in self.iterator
         ]
 
 
@@ -362,39 +488,19 @@ def combine_weights(
         df.loc[:, new_weight] = df[weights].prod(axis=1)
 
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import List, Iterable, Union, Optional
-from os import path
-
-from particle import Particle
-
-import itertools
-import numpy as np
-from pandas import DataFrame, concat, read_csv
-from uncertainties import unumpy as unp, ufloat
-
-
 class CorrectionTableFinder:
-
     """
     Factory method class to get correction tables for kaons,  pions, electrons and muons
     """
 
-    def __init__(
-        self,
-        particle_species,
-        online_cut,
-        base_table_path,
-        variable
-    ):
+    def __init__(self, particle_species, online_cut, base_table_path, variable):
         self.particle_species = particle_species
         self.online_cut = online_cut
         self.base_table_path = base_table_path
         self.variable = variable
 
-        self.true_pdg = (self.particle_species_settings[particle_species]["true_pdgs"],)
-        self.fake_pdg = (self.particle_species_settings[particle_species]["fake_pdgs"],)
+        self.true_pdg = self.particle_species_settings[particle_species]["true_pdgs"]
+        self.fake_pdg = self.particle_species_settings[particle_species]["fake_pdgs"]
 
         self.value = self.get_cut_value()
         self.cut_type = self.get_cut_type()
@@ -407,20 +513,7 @@ class CorrectionTableFinder:
         )
 
         self.eff_table = self.get_table(efficiency_table_names)
-        self.fake_table = self.get_table(fake_rate_table_names)
-
-
-    @classmethod
-    def kaons(cls, external_info):
-
-        particle_species = "kaon"
-
-        return cls(
-            particle_species=particle_species,
-            online_cut=external_info["online_cut"],
-            base_table_path=external_info["table_paths"],
-            variable = None
-        )
+        self.fake_rate_table = self.get_table(fake_rate_table_names)
 
     @classmethod
     def kaons(cls, external_info):
@@ -431,7 +524,7 @@ class CorrectionTableFinder:
             particle_species=particle_species,
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
-            variable = None
+            variable=None,
         )
 
     @classmethod
@@ -443,7 +536,7 @@ class CorrectionTableFinder:
             particle_species=particle_species,
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
-            variable = None
+            variable=None,
         )
 
     @classmethod
@@ -455,7 +548,7 @@ class CorrectionTableFinder:
             particle_species=particle_species,
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
-            variable = external_info["variable"]
+            variable=external_info["variable"],
         )
 
     @classmethod
@@ -467,7 +560,7 @@ class CorrectionTableFinder:
             particle_species=particle_species,
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
-            variable = external_info["variable"]
+            variable=external_info["variable"],
         )
 
     @property
@@ -599,14 +692,22 @@ class CorrectionTableFinder:
 
         if self.particle_species in ["kaon", "pion"]:
             table = concat([read_csv(x) for x in table_names])
-            table = table.reset_index(drop=True)
             self.make_pidvar_compatible(table, max_uncertainty=10)
 
         elif self.particle_species in ["elec", "muon"]:
             table = concat([read_csv(x) for x in table_names])
-            table = table.query(self.get_lid_queries())
+            table.query(self.get_lid_queries(), inplace=True)
+
+        self.add_mcPDG_to_table(table)
 
         return table
+
+    def add_mcPDG_to_table(self, table):
+
+        table.loc[:, "mcPDG"] = -9999
+
+        table.loc[table["charge"] == "-", "mcPDG"] = self.true_pdg[0]
+        table.loc[table["charge"] == "+", "mcPDG"] = self.true_pdg[0] * -1
 
     @staticmethod
     def make_pidvar_compatible(
@@ -654,13 +755,17 @@ class CorrectionTableFinder:
                 "data_MC_uncertainty_sys_up",
                 "data_MC_uncertainty_sys_dn",
             ]
-            table = table[table[unc_cols].max(axis=1) <= max_uncertainty]
+            # table = table[table[unc_cols].max(axis=1) <= max_uncertainty]
             # for θ in [0, π], cos(θ) is strictly decreasing, so we have invert min and max when inverting the cosine
+        table["theta_min"] = -9999
+        table["theta_max"] = -9999
         table.loc[:, "theta_min"] = np.arccos(table["cos_max"].copy(deep=True))
         table.loc[:, "theta_max"] = np.arccos(table["cos_min"].copy(deep=True))
 
         # PIDvar expects charge columns to contain + or -
         table.loc[:, "charge"] = np.where(table["charge"] == +1, "+", "-")
+
+        return table
 
     def get_lid_queries(self):
 
