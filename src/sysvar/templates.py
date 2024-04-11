@@ -6,9 +6,9 @@ from abc import ABC, abstractmethod
 from typing import Union
 
 import numpy as np
-from pandas import DataFrame
+from pandas import DataFrame, concat
 
-from sysvar.corrections import BaseCorrection, Correction2DCategorical
+from sysvar.corrections import BaseCorrection, Correction2DCategorical, PIDCorrection2D
 from sysvar.variations import Variator
 
 
@@ -41,14 +41,24 @@ class Template(ABC):
         if self._is_existing_variable(total_weight, df.columns):
             self.total_weight = total_weight
             columns.append(total_weight)
-        if syst_weight is not None:
+        # Add the second clause to escape check for PIDCorrection2D
+        if syst_weight is not None and not isinstance(syst_weight, dict):
             self._is_existing_variable(syst_weight, df.columns)
             columns.append(syst_weight)
         self.syst_weight = syst_weight
         # Make a deep copy only of the columns that are needed
         # PATCH, FIXME
-        if not isinstance(correction, Correction2DCategorical):
+        if not isinstance(correction, Correction2DCategorical) and not isinstance(
+            correction, PIDCorrection2D
+        ):
             columns.append(correction.dependant_variable)
+        elif isinstance(correction, PIDCorrection2D):
+            columns.extend(list(syst_weight.values()))
+            for prefix in syst_weight.keys():
+                columns.append("_".join((prefix, correction.p)))
+                columns.append("_".join((prefix, correction.theta)))
+                columns.append("_".join((prefix, correction.PDG)))
+                columns.append("_".join((prefix, correction.mcPDG)))
         else:
             columns.append(correction.categorical_variable)
             columns.append(correction.continuus_variable)
@@ -139,31 +149,80 @@ class Template(ABC):
 
     def add_variations(self):
 
+        if isinstance(self.syst_weight, str):
+            syst_weight = self.syst_weight
+            self._initialize_variations(syst_weight)
+            self._add_variations_to_df(syst_weight)
+        elif isinstance(self.syst_weight, dict):
+            for prefix, syst_weight in self.syst_weight.items():
+                self._initialize_variations(syst_weight)
+                self._add_variations_to_df(syst_weight, prefix)
+
+            self._combine_variations()
+
+    def _initialize_variations(self, syst_weight):
         # Initialize the nominal up and down variations
-        self.df.loc[:, f"{self.syst_weight}_up"] = 1
-        self.df.loc[:, f"{self.syst_weight}_down"] = 1
+        self.df.loc[:, f"{syst_weight}_up"] = 1
+        self.df.loc[:, f"{syst_weight}_down"] = 1
 
         # Initialize the variations
-        self.df.loc[:, [f"{self.syst_weight}_var_{i}" for i in range(self.Nvar)]] = 1
+        self.df.loc[:, [f"{syst_weight}_var_{i}" for i in range(self.Nvar)]] = 1
 
-        for i, (q, te) in enumerate(
-            zip(self.correction.queries, self.correction.total_error)
-        ):
+    def _add_variations_to_df(self, syst_weight, prefix: Union[None, str] = None):
+
+        if prefix is None:
+            queries = self.correction.queries
+        else:
+            queries = self.correction.build_queries(prefix)
+
+        for i, (q, te) in enumerate(zip(queries, self.correction.total_error)):
             # Now add the variations of the corrections to the dataframe entries that
             # pass the cuts
 
-            self.df.loc[self.df.eval(q), f"{self.syst_weight}_up"] = (
-                self.df[self.syst_weight] + te
-            )
+            # Commenting out, I think I don't need this at all
+            # This could only be useful for the FF stuff but there we don't
+            # calculate eigenvariations ourselves
+            #
+            # self.df.loc[self.df.eval(q), f"{syst_weight}_up"] = (
+            #    self.df[syst_weight] + te
+            # )
 
-            self.df.loc[self.df.eval(q), f"{self.syst_weight}_down"] = (
-                self.df[self.syst_weight] - te
-            )
+            # self.df.loc[self.df.eval(q), f"{syst_weight}_down"] = (
+            #    self.df[syst_weight] - te
+            # )
 
             self.df.loc[
                 self.df.eval(q),
-                [f"{self.syst_weight}_var_{j}" for j in range(self.Nvar)],
+                [f"{prefix}_{syst_weight}_var_{j}" for j in range(self.Nvar)],
             ] = self.variator.variations[:, i]
+
+    def _combine_variations(self):
+
+        # Commenting out, I think I don't need this at all
+        # This could only be useful for the FF stuff but there we don't
+        # calculate eigenvariations ourselves
+
+        # self.df.loc[:, "combination_up"] = self.df[
+        #    [f"{x}_up" for x in self.syst_weight]
+        # ].prod(axis=1)
+        # self.df.loc[:, "combination_down"] = self.df[
+        #    [f"{x}_down" for x in self.syst_weight]
+        # ].prod(axis=1)
+
+        for j in range(self.Nvar):
+            # Collect columns to be multiplied. These are all all the corrected particles
+            columns_to_multiply = [
+                f"{x}_{y}_var_{j}" for x, y in self.syst_weight.items()
+            ]
+
+            # Multiply the selected columns. Essentially multiplying the corrections to
+            # to get only one back
+            product_column = self.df[columns_to_multiply].prod(axis=1)
+
+            # Concatenate the product column to the DataFrame
+            self.df = concat(
+                [self.df, product_column.rename(f"combination_var_{j}")], axis=1
+            )
 
     def _get_absolute_variations(self):
         absolute_variations = np.empty((self.Nbins, self.Nvar))
@@ -203,6 +262,7 @@ class Template2D(Template):
             if index == "MC":
                 weights = np.square(self.df[self.total_weight])
             # FIXME This needs to be safely generalized
+            # This is aligned for Felix's tuples now
             elif (
                 index in ["up", "down"]
                 or index in [f"up{x}" for x in range(9)]
@@ -218,10 +278,23 @@ class Template2D(Template):
 
         else:
             # Divide with the nominal systematic weight and multiply with the varied one
-            weights = np.array(
-                (self.df[self.total_weight] / self.df[self.syst_weight].replace(0, 1))
-                * self.df[f"{self.syst_weight}_var_{index}"]
-            )
+            if isinstance(self.syst_weight, str):
+                weights = np.array(
+                    (
+                        self.df[self.total_weight]
+                        / self.df[self.syst_weight].replace(0, 1)
+                    )
+                    * self.df[f"{self.syst_weight}_var_{index}"]
+                )
+
+            elif isinstance(self.syst_weight.values(), dict):
+                weights = np.array(
+                    (
+                        self.df[self.total_weight]
+                        / self.df[self.syst_weight].replace(0, 1)
+                    ).product(axis=1)
+                    * self.df[f"combination_var_{index}"]
+                )
 
         hist = np.histogramdd(
             np.array(self.df[[*self.binning.keys()]]),

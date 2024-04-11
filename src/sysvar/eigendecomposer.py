@@ -13,6 +13,7 @@ from sysvar.corrections import (
     CorrectionBF,
     Correction1D,
     Correction2DCategorical,
+    PIDCorrection2D,
 )
 from sysvar.variations import Variator
 from sysvar.templates import Template2D
@@ -143,6 +144,7 @@ class EigenDecomposer:
             "1D": Correction1D,
             "2DCategorical": Correction2DCategorical,
             "BF": CorrectionBF,
+            "2DPID": PIDCorrection2D,
         }
         try:
             return correction_types[corr_type]

@@ -374,12 +374,14 @@ class PIDCorrection2D(BaseCorrection):
 
         if rate == "eff":
             table = eff_table
+            # PATCH
+            # This has to be read somewhere else somehow
+            self._true_pdg = table_finders[0].true_pdg
         elif rate == "fake":
             table = fake_rate_table
-
-        # PATCH
-        # This has to be read somewhere else somehow
-        self._true_pdg = table_finders[0].fake_pdg
+            # PATCH
+            # This has to be read somewhere else somehow
+            self._true_pdg = table_finders[0].fake_pdg
 
         return table
 
@@ -397,8 +399,13 @@ class PIDCorrection2D(BaseCorrection):
 
     @property
     def queries(self):
+        # PATCH
+        # This just "implements" the property to satisfy the parent class
+        pass
+
+    def build_queries(self, prefix: str = ""):
         return [
-            f"{row[1]['p_min']} <= {self.p} < {row[1]['p_max']} & {row[1]['theta_min']} <= {self.theta} < {row[1]['theta_max']} & {self.PDG} == {row[1]['mcPDG']} & abs({self.mcPDG}) in {self._true_pdg}"
+            f"({row[1]['p_min']} <= {prefix}_{self.p} < {row[1]['p_max']} & {row[1]['theta_min']} <= {prefix}_{self.theta} < {row[1]['theta_max']} & {prefix}_{self.PDG} == {row[1]['mcPDG']} & {prefix}_{self.mcPDG} in {self._true_pdg})"
             for row in self.iterator
         ]
 
@@ -568,20 +575,20 @@ class CorrectionTableFinder:
 
         return {
             "kaon": {
-                "true_pdgs": [321],
-                "fake_pdgs": [211],
+                "true_pdgs": [321, -321],
+                "fake_pdgs": [211, -211],
                 "eff_table_ids": ["keff"],
                 "fake_rate_table_ids": ["piFk"],
             },
             "pion": {
-                "true_pdgs": 211,
-                "fake_pdgs": 321,
+                "true_pdgs": [211, -211],
+                "fake_pdgs": [321, -321],
                 "eff_table_ids": ["pieff"],
                 "fake_rate_table_ids": ["kFpi"],
             },
             "elec": {
-                "true_pdgs": [11],
-                "fake_pdgs": [321, 211],
+                "true_pdgs": [11, -11],
+                "fake_pdgs": [321, 211, -321, -211],
                 "eff_table_ids": ["e_efficiency"],
                 "fake_rate_table_ids": [
                     "K_e_fakeRate",
@@ -589,8 +596,8 @@ class CorrectionTableFinder:
                 ],
             },
             "muon": {
-                "true_pdgs": [13],
-                "fake_pdgs": [321, 211],
+                "true_pdgs": [13, -11],
+                "fake_pdgs": [321, 211, -321, -211],
                 "eff_table_ids": ["mu_efficiency"],
                 "fake_rate_table_ids": [
                     "K_mu_fakeRate",
@@ -707,7 +714,7 @@ class CorrectionTableFinder:
         table.loc[:, "mcPDG"] = -9999
 
         table.loc[table["charge"] == "-", "mcPDG"] = self.true_pdg[0]
-        table.loc[table["charge"] == "+", "mcPDG"] = self.true_pdg[0] * -1
+        table.loc[table["charge"] == "+", "mcPDG"] = self.true_pdg[1]
 
     @staticmethod
     def make_pidvar_compatible(
