@@ -97,6 +97,8 @@ class EigenDecomposer:
     def cov(self) -> np.ndarray:
         return np.cov(self.combined_variations)
 
+    # FIXME add a setter
+
     @property
     def corr(self) -> np.ndarray:
         return np.corrcoef(self.combined_variations)
