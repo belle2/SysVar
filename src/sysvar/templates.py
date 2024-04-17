@@ -193,7 +193,12 @@ class Template(ABC):
 
             self.df.loc[
                 self.df.eval(q),
-                [f"{prefix}_{syst_weight}_var_{j}" for j in range(self.Nvar)],
+                [
+                    f"{prefix}_{syst_weight}_var_{j}"
+                    if prefix is not None
+                    else f"{syst_weight}_var_{j}"
+                    for j in range(self.Nvar)
+                ],
             ] = self.variator.variations[:, i]
 
     def _combine_variations(self):
