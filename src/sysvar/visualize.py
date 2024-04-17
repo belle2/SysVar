@@ -400,7 +400,7 @@ class VariationVisualizer(Visualizer):
         sns.heatmap(
             self.instance.corr_matrix,
             ax=ax,
-            #annot=True,
+            # annot=True,
             cbar_kws={"label": "Pearson coeff."},
             cmap=CMAP,
             vmin=0,
@@ -490,7 +490,9 @@ class VariationVisualizer(Visualizer):
 
         for i in range(len(self.instance.correction.central_values)):
             hist = np.histogram(
-                self.instance.relative_variations[:, i], range=(min_var, max_var), bins=nbins
+                self.instance.relative_variations[:, i],
+                range=(min_var, max_var),
+                bins=nbins,
             )
             counts.append(hist[0])
             bin_edges.append(hist[1])
@@ -977,11 +979,12 @@ class EigenDecomposerVisualizer(Visualizer):
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
 
-        x = np.arange(self.instance.eigen_values.shape[0])
-
+        total_N_eigendirections = self.instance.eigen_values.shape[0]
+        x = np.arange(len(self.instance.max_differences))
+        y = self.instance.max_differences / self.instance.cov.max()
         ax.plot(
             x,
-            self.instance.max_differences / self.instance.cov.max(),
+            y,
             linestyle="",
             marker=".",
             color="black",
@@ -991,10 +994,10 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.set_ylabel(r"max($\frac{|Cov - Cov^{'}|}{Cov}$)")
         ax.set_xlabel("Eigendirection")
 
-        ax.text(
-            x[-1] / 2,
-            np.max(self.instance.max_differences / self.instance.cov.max()),
-            f"Keeping {self.instance.N_important_dims}/{x[-1]+1} eigendirections",
+        ax.annotate(
+            f"Keeping {self.instance.N_important_dims}/{total_N_eigendirections} eigendirections \n (first 50 considered only)",
+            (0.5, 0.5),
+            xycoords="axes fraction",
             color="#eab90cff",
         )
 

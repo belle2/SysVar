@@ -133,6 +133,16 @@ class EigenDecomposer:
                 np.abs(np.real(self.cov - np.sum(subset_covariances, axis=0))).max()
             )
 
+            # Calculate only the first 50 eigendirections to save time
+            # It's highly unlikely that an analysis will use > 50 nuisance parameters
+            # for one systematic only
+            if n_vectors > 49:
+                break
+
+        logging.warn(
+            "Only the first 50 eigendirections have been considered to find the maximum number of eigenvariations. This is an arbitrary choice as it's highly unlikely that an analysis will use > 50 nuisance parameters for only one systematic source"
+        )
+
         return max_differences
 
     @staticmethod
