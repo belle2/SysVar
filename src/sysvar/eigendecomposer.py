@@ -188,7 +188,7 @@ class EigenDecomposer:
             # FIX this defaults to Template2D logging. Make it more generic
             t = Template2D(
                 tmp_df,
-                self.settings["bins"],
+                self.settings["bins"][reco_mode[1]],
                 self.settings["weight"],
                 self.settings["systematics"][self.syst_effect]["weight"],
                 self.correction,
@@ -228,12 +228,7 @@ class EigenDecomposer:
             self.Nbins,
             self.N_important_dims,
         )
-
-    def _get_unrolled_nominals(self):
-        return self.nominal_hist.reshape(
-            len(self.decay_modes), len(self.fit_ctgies), self.Nbins
-        )
-
+    
     @staticmethod
     def _get_TBranch_name(*args):
         return "/".join(args)
@@ -267,13 +262,12 @@ class EigenDecomposer:
 
     def save_template_variations(self):
 
-        variations = self._get_unrolled_variations()
-
         with uproot.update(self.settings["filename"]) as newfile:
             logging.info("Updating file with uproot: %s", self.settings["filename"])
 
             previous_tree = None
 
+            index = 0
             for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
                 self.enumerated_iterator, self.templates
             ):
@@ -285,7 +279,7 @@ class EigenDecomposer:
 
                 for n_var in range(self.N_important_dims):
 
-                    var = variations[tree_i, ctgy_i, :, n_var]
+                    var = self.eigen_variations[index:index + t.Nbins, n_var]
 
                     branch_name = self._get_TBranch_name(
                         tree[1], ctgy, f"{self.syst_effect}_var{n_var+1}_up"
@@ -304,5 +298,7 @@ class EigenDecomposer:
                     )
 
                     newfile[branch_name] = nominal[0] - var, nominal[1]
+
+                index += t.Nbins
 
                 previous_tree = tree

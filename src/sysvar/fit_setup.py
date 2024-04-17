@@ -30,6 +30,9 @@ def save_existing_eigenvariations(df, analysis: str, systematic: str):
 
         logging.info("Updating file with uproot: %s", settings["filename"])
         for region, tree in zip(regions, region_trees):
+            
+            binning = settings["bins"][tree]
+            
             for ctgy in fit_ctgies:
 
                 q = f"{ctgy_id_column} == '{ctgy}' and {region_id_column} in @region"
@@ -45,8 +48,8 @@ def save_existing_eigenvariations(df, analysis: str, systematic: str):
                     for variation in range(N_eigen):
 
                         hist_up = np.histogramdd(
-                            np.array(tmp_df[[*settings["bins"].keys()]]),
-                            bins=[bins for bins in settings["bins"].values()],
+                            np.array(tmp_df[[*binning.keys()]]),
+                            bins=[bins for bins in binning.values()],
                             weights=np.array(
                                 tmp_df[weight]
                                 / tmp_df[syst_weight]
@@ -55,8 +58,8 @@ def save_existing_eigenvariations(df, analysis: str, systematic: str):
                         )
 
                         hist_down = np.histogramdd(
-                            np.array(tmp_df[[*settings["bins"].keys()]]),
-                            bins=[bins for bins in settings["bins"].values()],
+                            np.array(tmp_df[[*binning.keys()]]),
+                            bins=[bins for bins in binning.values()],
                             weights=tmp_df[weight]
                             / tmp_df[syst_weight]
                             * tmp_df[f"{syst_weight}_down{variation}"].fillna(1),
