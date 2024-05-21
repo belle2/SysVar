@@ -6,6 +6,16 @@ from typing import Iterable, Union, List
 import numpy as np
 
 
+def get_uncertainty_types():
+
+    return {
+        "fully_correlated": FullyCorrelatedUncertainty,
+        "uncorrelated": UncorrelatedUncertainty,
+        "correlated": CorrelatedUncertainty,
+        "fully_correlated_in_parts": FullyCorrelatedUncertaintyInParts,
+    }
+
+
 class NotAnArrayError(Exception):
     pass
 

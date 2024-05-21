@@ -5,10 +5,15 @@ from typing import Iterable, Union
 import numpy as np
 
 from sysvar.corrections import BaseCorrection
+from sysvar.visualize import VariatorVisualizer
+
+
+class MissingSavingInfo(Exception):
+    pass
+
 
 # TODO should this really be an ABC ? Need to think about it...
 class Variator(ABC):
-
     """
     Abstract base class for generating variations on a correction.
     Then the variator will create a big covariance matrix of all the uncertainties.
@@ -26,7 +31,6 @@ class Variator(ABC):
     """
 
     def __init__(self, correction: BaseCorrection, Nvar: int = 20):
-
         """
         Initialize a Variator with a correction object.
 
@@ -38,6 +42,29 @@ class Variator(ABC):
         self.correction = correction
         self.Nvar = Nvar
         self.variations = self.get_correction_variations()
+
+        self._save_figures = False
+        self.visualizer = None
+        self.figure_save_info = {
+            "namespace": None,
+            "top_dir": None,
+            "dir_spec": None,
+            "extra_ext": None,
+            "save": None,
+        }
+
+    @property
+    def save_figures(self):
+        return self._save_figures
+
+    @save_figures.setter
+    def save_figures(self, value):
+
+        if not isinstance(value, bool):
+            raise TypeError(
+                "save_figures is strictly a boolean variable. Please pass True or False. save_figure defaults to False"
+            )
+        self._save_figures = value
 
     @property
     def cov_matrix(self) -> np.ndarray:
@@ -93,7 +120,6 @@ class Variator(ABC):
         return np.random.multivariate_normal(zeros, covariance, Nvar)
 
     def get_correction_variations(self) -> np.ndarray:
-
         """
         Get variations on the correction.
         This adds the generated variations from the total covariance matrix
@@ -129,3 +155,50 @@ class Variator(ABC):
         return self.generate_variations(
             Nvar, self.correction.uncertainties[name].cov_matrix
         )
+
+    def register_figure_saving_info(
+        self,
+        namespace: list = None,
+        top_dir: str = None,
+        dir_spec: Union[str, None, bool] = None,
+        extra_ext: Union[str, Iterable, None] = None,
+    ):
+
+        self.figure_save_info = {
+            "namespace": namespace,
+            "top_dir": top_dir,
+            "dir_spec": dir_spec,
+            "extra_ext": extra_ext,
+            "save": self._save_figures,
+        }
+
+    @staticmethod
+    def explain_figure_saving_info():
+        raise NotImplementedError(
+            "Implement the method that explains what namespace, top_dir, dir_spec and extra_ext are doing"
+        )
+
+    def _check_saving_status(self):
+        if self._save_figures:
+            if all(x is None for x in list(self.figure_save_info.values())):
+                raise MissingSavingInfo(
+                    "You wish to save your figures by setting save_figures = True, but you have not specified the target saving info. SysVar will not save the figures at a random directory. Please call the register_figure_saving_info method to specify the necessary information before replotting. If you're are unsure what this info should be, call the explain_figure_saving_info method for a quick overview"
+                )
+            else:
+                pass
+
+    def plot_cov_and_corr(self):
+        self._check_saving_status()
+        visualizer = VariatorVisualizer(self, **self.figure_save_info)
+        visualizer.plot_cov_and_corr()
+
+    def plot_gaussian_variations(self):
+        self._check_saving_status()
+        visualizer = VariatorVisualizer(self, **self.figure_save_info)
+        visualizer.plot_gaussian_variations()
+
+    def plot_relative_variations_in_grid(self, nbins: int = 41):
+
+        self._check_saving_status()
+        visualizer = VariatorVisualizer(self, **self.figure_save_info)
+        visualizer.plot_relative_variations_in_grid(nbins)

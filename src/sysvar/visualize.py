@@ -1,3 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sysvar.corrections import BaseCorrection, CorrectionBF
+    from sysvar.uncertainties import Uncertainty
+    from sysvar.variations import Variator
+    from sysvar.templates import Template
+    from sysvar.eigendecomposer import EigenDecomposer
+
 from datetime import datetime
 from os import path, makedirs
 import math
@@ -15,12 +26,6 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.colors import LogNorm
 
-from sysvar.corrections import CorrectionBF, BaseCorrection
-from sysvar.uncertainties import Uncertainty
-from sysvar.variations import Variator
-from sysvar.templates import Template
-from sysvar.eigendecomposer import EigenDecomposer
-
 
 PALETTE = sns.color_palette("colorblind")
 CMAP = "Blues"
@@ -29,9 +34,9 @@ CMAP = "Blues"
 class Visualizer(ABC):
     def __init__(
         self,
-        instance: Union[BaseCorrection, Uncertainty, Variator, Template],
-        namespace: list,
-        top_dir: str,
+        instance: BaseCorrection,
+        namespace: list = None,
+        top_dir: str = None,
         dir_spec: Union[str, None, bool] = None,
         extra_ext: Union[str, Iterable, None] = None,
         save: bool = False,
@@ -49,6 +54,13 @@ class Visualizer(ABC):
     def create_single_figure(self):
         return plt.subplots(figsize=(8, 5), dpi=800)
 
+    def available_plots(
+        self,
+    ):
+        raise NotImplementedMethod(
+            "Implement a method that will tell you what kind of plots are available"
+        )
+
     @abstractmethod
     def plot_cov_matrix(self):
         pass
@@ -59,12 +71,12 @@ class Visualizer(ABC):
 
     def plot_cov_and_corr(self):
 
-        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=800)
+        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=800, sharey=True)
 
         self.plot_cov_matrix(ax[0])
         self.plot_corr_matrix(ax[1])
 
-        self.annotate_matrix_plot(ax)
+        self.annotate_matrix_plot(fig, ax)
 
         if self.save:
             self.save_figure(fig, ["cov_and_corr"])
@@ -134,7 +146,7 @@ class Visualizer(ABC):
 
         if dir_spec:
             today = datetime.today().strftime("%Y-%m-%d")
-            dir_name = today if dir_spec is None else "=".join((dir_spec, today))
+            dir_name = today if dir_spec is None else "-".join((today, dir_spec))
 
             outdir = path.join(top_dir, dir_name)
         else:
@@ -150,7 +162,6 @@ class Visualizer(ABC):
         index: Union[None, int] = None,
         plot_func: str = "step",
     ):
-
         """
         Plots a variation on a given axis.
         The absence of a value for the index arguments shows that this is a nominal template.
@@ -252,6 +263,7 @@ class CorrectionVisualizer(Visualizer):
             np.arange(len(self.instance.central_values)), self.instance.strings
         )
         ax.set_xlabel("Correction weight")
+        ax.set_title(f"{self.instance.label} uncertainties")
         plt.legend(bbox_to_anchor=(1, 0.7))
 
         if self.save:
@@ -272,7 +284,7 @@ class UncertaintyVisualizer(Visualizer):
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
 
-    def annotate_matrix_plot(self, ax: Axes):
+    def annotate_matrix_plot(self, fig: Figure, ax: Axes):
 
         if isinstance(ax, Axes):
             self._annotate_axis(ax)
@@ -280,20 +292,22 @@ class UncertaintyVisualizer(Visualizer):
             for axis in ax:
                 self._annotate_axis(axis)
 
+        fig.suptitle(self.instance.name + " uncertainty")
+
     def _annotate_axis(self, ax):
 
         ax.set_xlabel("Correction bins")
         ax.set_ylabel("Correction bins")
 
         ax.set_xticks(
-            np.arange(len(self.instance.string_boundaries)),
+            np.arange(len(self.instance.string_boundaries)) + 0.5,
             self.instance.string_boundaries,
-            rotation=45,
+            rotation=30,
         )
         ax.set_yticks(
-            np.arange(len(self.instance.string_boundaries)),
+            np.arange(len(self.instance.string_boundaries)) + 0.5,
             self.instance.string_boundaries,
-            rotation=-45,
+            rotation=0,
         )
 
     def plot_cov_matrix(self, ax: Union[Axes, None] = None):
@@ -331,7 +345,7 @@ class UncertaintyVisualizer(Visualizer):
         return ax
 
 
-class VariationVisualizer(Visualizer):
+class VariatorVisualizer(Visualizer):
     def __init__(
         self,
         instance: Variator,
@@ -352,7 +366,7 @@ class VariationVisualizer(Visualizer):
     def strings(self, values):
         self._strings = values
 
-    def annotate_matrix_plot(self, ax: Axes):
+    def annotate_matrix_plot(self, fig: Figure, ax: Axes):
 
         if isinstance(ax, Axes):
             self._annotate_axis(ax)
@@ -360,20 +374,27 @@ class VariationVisualizer(Visualizer):
             for axis in ax:
                 self._annotate_axis(axis)
 
+        fig.suptitle(f"Total covariance for {self.instance.correction.label}")
+
     def _annotate_axis(self, ax):
 
         ax.set_xlabel("Correction bins")
         ax.set_ylabel("Correction bins")
 
+        # PATCH
+        # FIXME
+        # Add local import to avoid circular imports
+        from sysvar.corrections import CorrectionBF
+
         ax.set_xticks(
             np.arange(len(self._strings)) + 0.5,
             self._strings,
-            rotation=90 if isinstance(self.instance.correction, CorrectionBF) else 0,
+            rotation=(90 if isinstance(self.instance.correction, CorrectionBF) else 0),
         )
         ax.set_yticks(
             np.arange(len(self._strings)) + 0.5,
             self._strings,
-            rotation=0 if isinstance(self.instance.correction, CorrectionBF) else 90,
+            rotation=(0 if isinstance(self.instance.correction, CorrectionBF) else 0),
         )
 
     def plot_cov_matrix(self, ax: Union[Axes, None] = None):
@@ -400,7 +421,7 @@ class VariationVisualizer(Visualizer):
         sns.heatmap(
             self.instance.corr_matrix,
             ax=ax,
-            # annot=True,
+            annot=True,
             cbar_kws={"label": "Pearson coeff."},
             cmap=CMAP,
             vmin=0,
@@ -411,7 +432,6 @@ class VariationVisualizer(Visualizer):
         return ax
 
     def plot_gaussian_variations(self):
-
         """
         Plot Gaussian variations of the corrections.
 
@@ -435,13 +455,10 @@ class VariationVisualizer(Visualizer):
 
             # Draw a line at the mean value
             ax[i].axvline(mean, color="brown")
-            # Add some annotations
-            ax[i].annotate(
-                f"{str(self.instance.Nvar)} variations",
-                (0.69, 0.9),
-                xycoords="axes fraction",
-            )
-            ax[i].annotate(s, (0.69, 0.85), xycoords="axes fraction")
+
+            ax[i].set_title(s, fontsize=14)
+
+        fig.suptitle(f"{self.instance.Nvar} variations", fontsize=18)
 
         if self.save:
             self.save_figure(fig, ["gaussian_variations"])
@@ -449,7 +466,6 @@ class VariationVisualizer(Visualizer):
         return fig, ax
 
     def plot_relative_variations(self, value_edges: Iterable, Nvar: int = 5):
-
         """
         Plots the relative variations of the templates.
         The Nvar argument specifies the number of variatios that will be plotted.
@@ -480,13 +496,13 @@ class VariationVisualizer(Visualizer):
 
         return fig, ax
 
-    def plot_relative_variations_in_grid(self, nbins: int = 21):
+    def plot_relative_variations_in_grid(self, nbins: int = 41):
 
         counts = []
         bin_edges = []
 
-        min_var = np.round(np.min(self.instance.relative_variations), 1)
-        max_var = np.round(np.max(self.instance.relative_variations), 1)
+        min_var = np.round(np.min(self.instance.relative_variations), 2)
+        max_var = np.round(np.max(self.instance.relative_variations), 2)
 
         for i in range(len(self.instance.correction.central_values)):
             hist = np.histogram(
@@ -507,10 +523,12 @@ class VariationVisualizer(Visualizer):
             np.arange(len(bin_edges[0][:-1])),
             np.round((bin_edges[0][1:] + bin_edges[0][:-1]) / 2, 3),
         )
-        ax.set_ylim(min_var, max_var)
         ax.set_ylabel("Relative variation")
 
         ax.invert_yaxis()
+
+        if self.save:
+            self.save_figure(fig, ["relative_variations_in_grid"])
 
         return fig, ax
 
@@ -539,6 +557,49 @@ class TemplateVisualizer(Visualizer):
 
         ax.set_xlabel("Bins")
         ax.set_ylabel("Bins")
+
+    def plot_relative_variations_in_grid(self, ax, nbins: int = 11):
+
+        counts = []
+        bin_edges = []
+
+        variations = self.instance._get_absolute_variations()
+        nominals = self.instance.make_hist()
+
+        relative_variations = np.nan_to_num(variations.T / nominals[0], nan=1)
+
+        min_var = np.round(np.min(relative_variations), 2)
+        max_var = np.round(np.max(relative_variations), 2)
+
+        for i in range(relative_variations.shape[1]):
+            hist = np.histogram(
+                relative_variations[:, i],
+                range=(min_var, max_var),
+                bins=nbins,
+            )
+            counts.append(hist[0])
+            bin_edges.append(hist[1])
+
+        cb = ax.matshow(np.array(counts).T, cmap=CMAP)
+        plt.colorbar(cb)
+
+        ax.set_xlabel("fit variable bins")
+        ax.set_xticks(
+            np.arange(relative_variations.shape[1]),
+            np.arange(relative_variations.shape[1]) + 1,
+        )
+        ax.set_yticks(
+            np.arange(nbins),
+            np.round(np.linspace(min_var, max_var, nbins), 2),
+        )
+        ax.set_ylabel("Relative variation")
+
+        ax.invert_yaxis()
+
+        if self.save:
+            self.save_figure(fig, ["template_relative_variations_in_grid"])
+
+        return ax
 
     def plot_cov_matrix(self, ax: Union[Axes, None] = None):
 
@@ -713,9 +774,11 @@ class TemplateVisualizer(Visualizer):
         ax.set_xlabel("Eigendirection")
 
         eigenvalue_ticks = [
-            round(x, 3)
-            if x > 10e-3
-            else rf"~$10^{{{math.floor(math.log(abs(x), 10))}}}$"
+            (
+                round(x, 3)
+                if x > 10e-3
+                else rf"~$10^{{{math.floor(math.log(abs(x), 10))}}}$"
+            )
             for x in self.instance.eigen_values
         ]
         secax.set_xticks(x, eigenvalue_ticks, fontsize=10)
@@ -737,14 +800,16 @@ class TemplateVisualizer(Visualizer):
         gs = mpl.gridspec.GridSpec(2, 6, wspace=0.4, hspace=0.15)
 
         ax0 = fig.add_subplot(gs[0, 0:4])
-        self.plot_corr_matrix(ax0)
+        self.plot_nominal_template(ax0)
+
         self.annotate_matrix_plot(ax0)
 
         ax01 = fig.add_subplot(gs[0, 4:6])
-        self.plot_eigenvalues(ax01)
+        # self.plot_eigenvalues(ax01)
+        self.plot_relative_variations_in_grid(ax01)
 
         ax1 = fig.add_subplot(gs[1, :3])
-        self.plot_nominal_template(ax1)
+        self.plot_corr_matrix(ax1)
 
         gs_low = gs[1, 3:].subgridspec(2, 1, height_ratios=[3.5, 1], hspace=0.1)
         ax2 = fig.add_subplot(gs_low[0, 0])
