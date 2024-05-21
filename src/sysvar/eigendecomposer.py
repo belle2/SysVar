@@ -17,6 +17,7 @@ from sysvar.corrections import (
 )
 from sysvar.variations import Variator
 from sysvar.templates import Template2D
+from sysvar.visualize import EigenDecomposerVisualizer
 
 import logging
 
@@ -44,6 +45,29 @@ class EigenDecomposer:
         self.templates = self._create_varied_templates()
         self.N_important_dims = 0
         self.important_dims_indices = None
+
+        self._save_figures = False
+        self.visualizer = None
+        self.figure_save_info = {
+            "namespace": None,
+            "top_dir": None,
+            "dir_spec": None,
+            "extra_ext": None,
+            "save": None,
+        }
+
+    @property
+    def save_figures(self):
+        return self._save_figures
+
+    @save_figures.setter
+    def save_figures(self, value):
+
+        if not isinstance(value, bool):
+            raise TypeError(
+                "save_figures is strictly a boolean variable. Please pass True or False. save_figure defaults to False"
+            )
+        self._save_figures = value
 
     @cached_property
     def decay_modes(self) -> list:
@@ -228,7 +252,7 @@ class EigenDecomposer:
             self.Nbins,
             self.N_important_dims,
         )
-    
+
     @staticmethod
     def _get_TBranch_name(*args):
         return "/".join(args)
@@ -279,7 +303,7 @@ class EigenDecomposer:
 
                 for n_var in range(self.N_important_dims):
 
-                    var = self.eigen_variations[index:index + t.Nbins, n_var]
+                    var = self.eigen_variations[index : index + t.Nbins, n_var]
 
                     branch_name = self._get_TBranch_name(
                         tree[1], ctgy, f"{self.syst_effect}_var{n_var+1}_up"
@@ -302,3 +326,29 @@ class EigenDecomposer:
                 index += t.Nbins
 
                 previous_tree = tree
+
+    @staticmethod
+    def explain_figure_saving_info():
+        raise NotImplementedError(
+            "Implement the method that explains what namespace, top_dir, dir_spec and extra_ext are doing"
+        )
+
+    def _check_saving_status(self):
+        if self._save_figures:
+            if all(x is None for x in list(self.figure_save_info.values())):
+                raise MissingSavingInfo(
+                    "You wish to save your figures by setting save_figures = True, but you have not specified the target saving info. SysVar will not save the figures at a random directory. Please call the register_figure_saving_info method to specify the necessary information before replotting. If you're are unsure what this info should be, call the explain_figure_saving_info method for a quick overview"
+                )
+            else:
+                pass
+
+    def plot_cov_diff(self):
+
+        self._check_saving_status()
+        self.visualizer = EigenDecomposerVisualizer(self, **self.figure_save_info)
+        self.visualizer.plot_cov_diff()
+
+    def plot_corr_matrix(self):
+        self._check_saving_status()
+        self.visualizer = EigenDecomposerVisualizer(self, **self.figure_save_info)
+        self.visualizer.plot_corr_matrix()

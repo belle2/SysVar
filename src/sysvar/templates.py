@@ -10,6 +10,7 @@ from pandas import DataFrame, concat
 
 from sysvar.corrections import BaseCorrection, Correction2DCategorical, PIDCorrection2D
 from sysvar.variations import Variator
+from sysvar.visualize import TemplateVisualizer
 
 
 class NotADictError(Exception):
@@ -68,6 +69,29 @@ class Template(ABC):
         self.correction = correction
         self.variator = variator
         self.Nvar = variator.Nvar if variator is not None else variator
+
+        self._save_figures = False
+        self.visualizer = None
+        self.figure_save_info = {
+            "namespace": None,
+            "top_dir": None,
+            "dir_spec": None,
+            "extra_ext": None,
+            "save": None,
+        }
+
+    @property
+    def save_figures(self):
+        return self._save_figures
+
+    @save_figures.setter
+    def save_figures(self, value):
+
+        if not isinstance(value, bool):
+            raise TypeError(
+                "save_figures is strictly a boolean variable. Please pass True or False. save_figure defaults to False"
+            )
+        self._save_figures = value
 
     @property
     def cov_matrix(self) -> np.ndarray:
@@ -194,9 +218,11 @@ class Template(ABC):
             self.df.loc[
                 self.df.eval(q),
                 [
-                    f"{prefix}_{syst_weight}_var_{j}"
-                    if prefix is not None
-                    else f"{syst_weight}_var_{j}"
+                    (
+                        f"{prefix}_{syst_weight}_var_{j}"
+                        if prefix is not None
+                        else f"{syst_weight}_var_{j}"
+                    )
                     for j in range(self.Nvar)
                 ],
             ] = self.variator.variations[:, i]
@@ -307,3 +333,30 @@ class Template2D(Template):
             weights=weights,
         )
         return (hist[0].flatten(), np.linspace(0, 1, hist[0].flatten().shape[0] + 1))
+
+    @staticmethod
+    def explain_figure_saving_info():
+        raise NotImplementedError(
+            "Implement the method that explains what namespace, top_dir, dir_spec and extra_ext are doing"
+        )
+
+    def _check_saving_status(self):
+        if self._save_figures:
+            if all(x is None for x in list(self.figure_save_info.values())):
+                raise MissingSavingInfo(
+                    "You wish to save your figures by setting save_figures = True, but you have not specified the target saving info. SysVar will not save the figures at a random directory. Please call the register_figure_saving_info method to specify the necessary information before replotting. If you're are unsure what this info should be, call the explain_figure_saving_info method for a quick overview"
+                )
+            else:
+                pass
+
+    def plot_systematic_overview(self):
+
+        self._check_saving_status()
+        self.visualizer = TemplateVisualizer(self, **self.figure_save_info)
+        self.visualizer.plot_systematic_overview()
+
+    def plot_relative_variations_in_grid(self):
+
+        self._check_saving_status()
+        self.visualizer = TemplateVisualizer(self, **self.figure_save_info)
+        self.visualizer.plot_relative_variations_in_grid()

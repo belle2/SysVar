@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Iterable, Union, Optional
@@ -10,13 +12,15 @@ import numpy as np
 from pandas import DataFrame, concat, read_csv
 from uncertainties import unumpy as unp, ufloat
 
-from sysvar.uncertainties import (
+from .uncertainties import (
     Uncertainty,
     FullyCorrelatedUncertainty,
     FullyCorrelatedUncertaintyInParts,
     UncorrelatedUncertainty,
+    get_uncertainty_types,
 )
 from sysvar.utils import read_yaml
+from sysvar.visualize import CorrectionVisualizer, UncertaintyVisualizer
 
 import logging
 
@@ -34,7 +38,15 @@ class UncertaintyWithSameNameExists(Exception):
     pass
 
 
+class UnkownUncertaintyType(Exception):
+    pass
+
+
 class NotValidRateType(Exception):
+    pass
+
+
+class MissingSavingInfo(Exception):
     pass
 
 
@@ -53,14 +65,32 @@ class BaseCorrection(ABC):
                 "Need to specify the systematic effect and the MC production in the positional arguments"
             )
 
+        self._save_figures = False
+        self.visualizer = None
+        self.figure_save_info = {
+            "namespace": None,
+            "top_dir": None,
+            "dir_spec": None,
+            "extra_ext": None,
+            "save": None,
+        }
+
     @property
-    @abstractmethod
-    def strings(self):
-        pass
+    def save_figures(self):
+        return self._save_figures
+
+    @save_figures.setter
+    def save_figures(self, value):
+
+        if not isinstance(value, bool):
+            raise TypeError(
+                "save_figures is strictly a boolean variable. Please pass True or False. save_figure defaults to False"
+            )
+        self._save_figures = value
 
     @property
     @abstractmethod
-    def queries(self):
+    def strings(self):
         pass
 
     @property
@@ -78,7 +108,7 @@ class BaseCorrection(ABC):
         else:
             return unp.std_devs(self.central_values)
 
-    def add_uncertainty(self, unc: Uncertainty) -> None:
+    def add_uncertainty(self, unc_name, unc_values, unc_obj: Uncertainty) -> None:
         """
         Add an uncertainty to the Correction.
 
@@ -89,12 +119,83 @@ class BaseCorrection(ABC):
             UncertaintyWithSameNameExists: If uncertainty with the same name has already been added to the variator.
 
         """
-        if unc.name in self.uncertainties.keys():
+        if unc_name in self.uncertainties.keys():
             raise UncertaintyWithSameNameExists(
-                f"An uncertainty with the name {unc.name} already exist in the set of uncertainties that that have been added to the Correction. Make sure that you add a specific uncertainty only once, and that there are no duplicate names"
+                f"An uncertainty with the name {unc_name} already exist in the set of uncertainties that that have been added to the Correction. Make sure that you add a specific uncertainty only once, and that there are no duplicate names"
             )
         else:
-            self.uncertainties.update({unc.name: unc})
+            self.uncertainties.update(
+                {unc_name: unc_obj(unc_name, unc_values, self.strings)}
+            )
+
+    def populate_uncertainties(self):
+
+        # Load the implemented uncertainty types
+        sysvar_uncertainties = get_uncertainty_types()
+
+        for unc_ctgy, uncertainty_dictionary in self.info["uncertainties"].items():
+            if unc_ctgy not in sysvar_uncertainties.keys():
+                raise UnkownUncertaintyType(
+                    f"Unkown type of uncertainty is declared in the yaml file. Available uncertainty types are: ({', '.join(list(sysvar_uncertainties.keys()))}) but '{unc_ctgy}' was found in the yaml file"
+                )
+            else:
+                for unc_name, unc_values in uncertainty_dictionary.items():
+                    self.add_uncertainty(
+                        unc_name=unc_name,
+                        unc_values=unc_values,
+                        unc_obj=sysvar_uncertainties[unc_ctgy],
+                    )
+
+    def register_figure_saving_info(
+        self,
+        namespace: list = None,
+        top_dir: str = None,
+        dir_spec: Union[str, None, bool] = None,
+        extra_ext: Union[str, Iterable, None] = None,
+    ):
+
+        self.figure_save_info = {
+            "namespace": namespace,
+            "top_dir": top_dir,
+            "dir_spec": dir_spec,
+            "extra_ext": extra_ext,
+            "save": self._save_figures,
+        }
+
+    @staticmethod
+    def explain_figure_saving_info():
+        raise NotImplementedError(
+            "Implement the method that explains what namespace, top_dir, dir_spec and extra_ext are doing"
+        )
+
+    def _check_saving_status(self):
+        if self._save_figures:
+            if all(x is None for x in list(self.figure_save_info.values())):
+                raise MissingSavingInfo(
+                    "You wish to save your figures by setting save_figures = True, but you have not specified the target saving info. SysVar will not save the figures at a random directory. Please call the register_figure_saving_info method to specify the necessary information before replotting. If you're are unsure what this info should be, call the explain_figure_saving_info method for a quick overview"
+                )
+            else:
+                pass
+
+    def plot_error_comparison(self):
+
+        self._check_saving_status()
+        self.visualizer = CorrectionVisualizer(self, **self.figure_save_info)
+        self.visualizer.plot_error_comparison()
+
+    def plot_uncertainty(self, unc_name: Union(str, None) = None):
+        self._check_saving_status()
+        if unc_name is None:
+            for unc_obj in self.uncertainties.values():
+                self.visualizer = UncertaintyVisualizer(
+                    unc_obj, **self.figure_save_info
+                )
+                self.visualizer.plot_cov_and_corr()
+        else:
+            self.visualizer = UncertaintyVisualizer(
+                self.uncertainties[unc_name], **self.figure_save_info
+            )
+            self.visualizer.plot_cov_and_corr()
 
 
 @dataclass
@@ -106,33 +207,18 @@ class Correction1D(BaseCorrection):
     upper_bounds: Iterable = None
 
     def __post_init__(self):
+
         super().__post_init__()
 
         self.central_values = self.info["correction"]
         self.dependant_variable = self.info["dependant_variable"]
+        self.unit = self.info["unit"]
+        self.label = self.info["label"]
+
         self.lower_bounds = self.info["min"]
         self.upper_bounds = self.info["max"]
 
-        # Add the fully correlated uncertainties
-        if "fully_correlated" in self.info.keys():
-            for unc_name, unc_values in self.info["fully_correlated"].items():
-                self.uncertainties.update(
-                    {
-                        unc_name: FullyCorrelatedUncertainty(
-                            unc_name, unc_values, self.strings
-                        )
-                    }
-                )
-
-        if "uncorrelated" in self.info.keys():
-            for unc_name, unc_values in self.info["uncorrelated"].items():
-                self.uncertainties.update(
-                    {
-                        unc_name: UncorrelatedUncertainty(
-                            unc_name, unc_values, self.strings
-                        )
-                    }
-                )
+        self.populate_uncertainties()
 
     @property
     def value_edges(self) -> np.ndarray:
@@ -145,7 +231,8 @@ class Correction1D(BaseCorrection):
     @property
     def strings(self) -> List[str]:
         return [
-            f"[ {low} - {up} ]" for low, up in zip(self.lower_bounds, self.upper_bounds)
+            f"{low} < {self.dependant_variable} < {up} {self.unit}"
+            for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
 
     @property
@@ -183,33 +270,6 @@ class Correction2DCategorical(BaseCorrection):
         self.continuus_edges = self.info["continuus_edges"]
 
         self.extra_variables = self.info["extra_variables"]
-
-        # Add the fully correlated uncertainties
-        if "fully_correlated" in self.info.keys():
-            for unc_name, unc_lists in self.info["fully_correlated"].items():
-
-                self.uncertainties.update(
-                    {
-                        unc_name: FullyCorrelatedUncertaintyInParts(
-                            unc_name,
-                            list(itertools.chain.from_iterable(unc_lists)),
-                            self.strings,
-                            part_dimensions,
-                        )
-                    }
-                )
-
-        if "uncorrelated" in self.info.keys():
-            for unc_name, unc_lists in self.info["uncorrelated"].items():
-                self.uncertainties.update(
-                    {
-                        unc_name: UncorrelatedUncertainty(
-                            unc_name,
-                            list(itertools.chain.from_iterable(unc_lists)),
-                            self.strings,
-                        )
-                    }
-                )
 
     @property
     def iterator(self):
@@ -252,15 +312,6 @@ class CorrectionBF(BaseCorrection):
         # Add the uncertainties as fully uncorrelated. This is a choice.
         # Can be very complicated as some of these modes may have been measured
         # by the same experiments, with complicated correlations
-        self.uncertainties.update(
-            {
-                "BF uncertainty": UncorrelatedUncertainty(
-                    "BF uncertainty",
-                    list(unp.std_devs(self.central_values)),
-                    self.strings,
-                )
-            }
-        )
 
     def _create_strings(self) -> List[str]:
 
