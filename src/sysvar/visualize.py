@@ -260,7 +260,7 @@ class CorrectionVisualizer(Visualizer):
             )
 
         ax.set_yticks(
-            np.arange(len(self.instance.central_values)), self.instance.strings
+            np.arange(len(self.instance.central_values)), self.instance.visual_labels
         )
         ax.set_xlabel("Correction weight")
         ax.set_title(f"{self.instance.label} uncertainties")
