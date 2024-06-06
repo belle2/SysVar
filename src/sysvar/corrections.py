@@ -90,8 +90,42 @@ class BaseCorrection(ABC):
 
     @property
     @abstractmethod
-    def strings(self):
+    def visual_labels(self):
         pass
+
+    @abstractmethod
+    def build_queries(self):
+        pass
+
+    def build_column_name(self, prefix: Union[str, None], variable: str) -> str:
+        """
+        Constructs a column name by combining a prefix and a variable name.
+
+        This method takes an optional prefix and a mandatory variable name to create a
+        column name string. If the prefix is provided, the resulting column name will be
+        a concatenation of the prefix and the variable, separated by an underscore. If
+        the prefix is `None`, the column name will simply be the variable name.
+
+        Args:
+            prefix (Union[str, None]): An optional string to prepend to the variable name. If `None`, no prefix is added.
+           variable (str): The variable name to use for constructing the column name.
+
+        Returns:
+            str: The constructed column name, either as "prefix_variable" or just "variable" if no prefix is provided.
+
+        Examples:
+            >>> obj = MyClass()
+            >>> obj.build_column_name("prefix", "variable")
+            'prefix_variable'
+            >>> obj.build_column_name(None, "variable")
+            'variable'
+        """
+        if prefix is None:
+            column_name = variable
+        else:
+            column_name = "_".join([prefix, variable])
+
+        return column_name
 
     @property
     def N(self) -> int:
@@ -125,7 +159,7 @@ class BaseCorrection(ABC):
             )
         else:
             self.uncertainties.update(
-                {unc_name: unc_obj(unc_name, unc_values, self.strings)}
+                {unc_name: unc_obj(unc_name, unc_values, self.visual_labels)}
             )
 
     def populate_uncertainties(self):
@@ -229,16 +263,17 @@ class Correction1D(BaseCorrection):
         return (self.value_edges[1:] + self.value_edges[:-1]) / 2
 
     @property
-    def strings(self) -> List[str]:
+    def visual_labels(self) -> List[str]:
         return [
             f"{low} < {self.dependant_variable} < {up} {self.unit}"
             for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
 
-    @property
-    def queries(self):
+    def build_queries(self, prefix: Union[str, None] = None):
+
+        column_name = self.build_column_name(prefix, self.dependant_variable)
         return [
-            f"{low} <= {self.dependant_variable} < {up}"
+            f"{low} <= {column_name} < {up}"
             for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
 
