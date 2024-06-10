@@ -74,6 +74,7 @@ class BaseCorrection(ABC):
             "extra_ext": None,
             "save": None,
         }
+        self.title = self.info["title"]
 
     @property
     def save_figures(self):
@@ -94,10 +95,11 @@ class BaseCorrection(ABC):
         pass
 
     @abstractmethod
-    def build_queries(self):
+    def build_queries(self) -> list:
         pass
 
-    def build_column_name(self, prefix: Union[str, None], variable: str) -> str:
+    @staticmethod
+    def _build_column_name(prefix: Union[str, None], variable: str) -> str:
         """
         Constructs a column name by combining a prefix and a variable name.
 
@@ -115,9 +117,9 @@ class BaseCorrection(ABC):
 
         Examples:
             >>> obj = MyClass()
-            >>> obj.build_column_name("prefix", "variable")
+            >>> obj._build_column_name("prefix", "variable")
             'prefix_variable'
-            >>> obj.build_column_name(None, "variable")
+            >>> obj._build_column_name(None, "variable")
             'variable'
         """
         if prefix is None:
@@ -126,6 +128,23 @@ class BaseCorrection(ABC):
             column_name = "_".join([prefix, variable])
 
         return column_name
+
+    @staticmethod
+    def _extend_queries_with_extra_cut(queries: list, extra_cut: str) -> list:
+        """Extends a list of queries by appending an extra condition to each query.
+
+        Args:
+            queries (list): A list of query strings.
+            extra_cut (str): An additional condition to be appended to each query.
+
+        Returns:
+            list: A new list of query strings with the extra condition appended.
+
+        Example:
+            >>> _extend_queries_with_extra_cut(['query1', 'query2'], 'extra_condition')
+            ['query1 & extra_condition', 'query2 & extra_condition']
+        """
+        return [" & ".join([q, extra_cut]) for q in queries]
 
     @property
     def N(self) -> int:
@@ -247,7 +266,6 @@ class Correction1D(BaseCorrection):
         self.central_values = self.info["correction"]
         self.dependant_variable = self.info["dependant_variable"]
         self.unit = self.info["unit"]
-        self.label = self.info["label"]
 
         self.lower_bounds = self.info["min"]
         self.upper_bounds = self.info["max"]
@@ -269,13 +287,19 @@ class Correction1D(BaseCorrection):
             for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
 
-    def build_queries(self, prefix: Union[str, None] = None):
+    def build_queries(
+        self, prefix: Union[str, None] = None, extra_cut: Union[str, None] = None
+    ) -> list:
 
-        column_name = self.build_column_name(prefix, self.dependant_variable)
-        return [
+        column_name = self._build_column_name(prefix, self.dependant_variable)
+        queries = [
             f"{low} <= {column_name} < {up}"
             for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
+        if extra_cut is not None:
+            queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+
+        return queries
 
 
 @dataclass
@@ -335,22 +359,23 @@ class CorrectionBF(BaseCorrection):
 
     dependant_variable: Union[str, None] = None
     central_values: Iterable = None
-    strings: Iterable = None
+    visual_labels: Iterable = None
     uncertainties: dict = field(default_factory=dict)
 
     def __post_init__(self):
         super().__post_init__()
 
-        self.central_values = self._calculate_scaling_ratios()
-        self.dependant_variable = self.info["general"]["dependant_variable"]
-        self.string = self._create_strings()
-        # Add the uncertainties as fully uncorrelated. This is a choice.
-        # Can be very complicated as some of these modes may have been measured
-        # by the same experiments, with complicated correlations
+        central_values, error_amplitudes = self._calculate_scaling_ratios()
+        self.central_values = central_values
+        # Visual labels needs to be defined  before we populate the uncertainties
+        # Otherwise the uncertainty object does not have visual_labels
+        self.visual_labels = self._create_strings()
+        self.populate_uncertainties(error_amplitudes)
+        self.dependant_variable = self.info["dependant_variable"]
 
     def _create_strings(self) -> List[str]:
 
-        mother = Particle.from_pdgid(self.info["general"]["mother_particle"]).latex_name
+        mother = Particle.from_pdgid(self.info["mother_particle"]).latex_name
         daughter_pdgs = [
             x for mode in self.info["modes"].values() for x in mode["daughters"]
         ]
@@ -382,14 +407,38 @@ class CorrectionBF(BaseCorrection):
             where=decaydec_BFs != 0,
         )
 
-        return list(unp.nominal_values(corrections))
+        return list(unp.nominal_values(corrections)), list(unp.std_devs(corrections))
 
-    @property
-    def queries(self):
-        return [
-            f"{self.dependant_variable} == '{mode['dmID']}'"
-            for mode in self.info["modes"].values()
+    def populate_uncertainties(self, error_amplitudes: list):
+        """
+        Overrides the method of the base class method as the error amplitutes are calculated dynamically from the calculate_scaling_ratios method
+
+        """
+
+        # Add the uncertainties as fully uncorrelated. This is a choice.
+        # Can be very complicated as some of these modes may have been measured
+        # by the same experiments, with complicated correlatiosn
+        unc_type = "fully_correlated"
+
+        sysvar_uncertainties = get_uncertainty_types()
+        self.add_uncertainty(
+            unc_name="BF_unc",
+            unc_values=error_amplitudes,
+            unc_obj=sysvar_uncertainties[unc_type],
+        )
+
+    def build_queries(
+        self, prefix: Union[str, None] = None, extra_cut: Union[str, None] = None
+    ) -> list:
+
+        column_name = self._build_column_name(prefix, self.dependant_variable)
+        queries = [
+            f"{column_name} == '{mode['dmID']}'" for mode in self.info["modes"].values()
         ]
+        if extra_cut is not None:
+            queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+
+        return queries
 
 
 @dataclass

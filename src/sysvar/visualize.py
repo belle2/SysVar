@@ -263,7 +263,7 @@ class CorrectionVisualizer(Visualizer):
             np.arange(len(self.instance.central_values)), self.instance.visual_labels
         )
         ax.set_xlabel("Correction weight")
-        ax.set_title(f"{self.instance.label} uncertainties")
+        ax.set_title(f"{self.instance.title} uncertainties")
         plt.legend(bbox_to_anchor=(1, 0.7))
 
         if self.save:
