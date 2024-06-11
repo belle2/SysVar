@@ -54,3 +54,5 @@ MANIFEST
 
 #Notebooks
 */notebooks/*.ipynb
+
+.pre-commit-config.yaml

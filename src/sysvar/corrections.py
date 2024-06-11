@@ -442,7 +442,7 @@ class CorrectionBF(BaseCorrection):
 
 
 @dataclass
-class PIDCorrection2D(BaseCorrection):
+class CorrectionPID(BaseCorrection):
 
     uncertainties: dict = field(default_factory=dict)
 
@@ -460,6 +460,8 @@ class PIDCorrection2D(BaseCorrection):
         self.PDG = self.info["PDG_variable"]
         self.mcPDG = self.info["mcPDG_variable"]
 
+        self.momentum_unit = self.info["momentum_unit"]
+
         # Add uncertainties as fully uncorrelated. This is a conservative choice
         error_id = "stat"
         self.uncertainties.update(
@@ -467,7 +469,7 @@ class PIDCorrection2D(BaseCorrection):
                 f"{error_id} uncertainty": UncorrelatedUncertainty(
                     f"{error_id} uncertainty",
                     self._extract_errors(f"{error_id}"),
-                    self.strings,
+                    self.visual_labels,
                 )
             }
         )
@@ -477,7 +479,7 @@ class PIDCorrection2D(BaseCorrection):
                 f"{error_id} uncertainty": UncorrelatedUncertainty(
                     f"{error_id} uncertainty",
                     self._extract_errors(f"{error_id}"),
-                    self.strings,
+                    self.visual_labels,
                 )
             }
         )
@@ -495,13 +497,13 @@ class PIDCorrection2D(BaseCorrection):
     def get_table(self, rate):
 
         table_finders = []
-        if self.systematic == "eID":
+        if "eID" in self.systematic:
             table_finders.append(CorrectionTableFinder.electrons(self.info))
-        if self.systematic == "muID":
+        if "muID" in self.systematic:
             table_finders.append(CorrectionTableFinder.muons(self.info))
-        elif self.systematic == "kID":
+        elif "kID" in self.systematic:
             table_finders.append(CorrectionTableFinder.kaons(self.info))
-        elif self.systematic == "piID":
+        elif "piID" in self.systematic:
             table_finders.append(CorrectionTableFinder.pions(self.info))
 
         eff_table = concat([x.eff_table for x in table_finders])
@@ -538,16 +540,29 @@ class PIDCorrection2D(BaseCorrection):
         # This just "implements" the property to satisfy the parent class
         pass
 
-    def build_queries(self, prefix: str = ""):
-        return [
-            f"({row[1]['p_min']} <= {prefix}_{self.p} < {row[1]['p_max']} & {row[1]['theta_min']} <= {prefix}_{self.theta} < {row[1]['theta_max']} & {prefix}_{self.PDG} == {row[1]['mcPDG']} & {prefix}_{self.mcPDG} in {self._true_pdg})"
+    def build_queries(
+        self, prefix: Union[str, None] = None, extra_cut: Union[str, None] = None
+    ) -> List[str]:
+
+        p_column_name = self._build_column_name(prefix, self.p)
+        theta_column_name = self._build_column_name(prefix, self.theta)
+        PDG_column_name = self._build_column_name(prefix, self.PDG)
+        mcPDG_column_name = self._build_column_name(prefix, self.mcPDG)
+
+        queries = [
+            f"({row[1]['p_min']} <= {p_column_name} < {row[1]['p_max']} & {row[1]['theta_min']} <= {theta_column_name} < {row[1]['theta_max']} & {PDG_column_name} == {row[1]['mcPDG']} & {mcPDG_column_name} in {self._true_pdg})"
             for row in self.iterator
         ]
 
+        if extra_cut is not None:
+            queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+
+        return queries
+
     @property
-    def strings(self):
+    def visual_labels(self) -> List[str]:
         return [
-            rf"{row[1]['p_min']} <= p < {row[1]['p_max']} & {row[1]['theta_min']} <= $\theta$ < {row[1]['theta_max']} & q = {row[1]['charge']}"
+            rf"{row[1]['p_min']} <= p < {row[1]['p_max']} {self.momentum_unit} & {row[1]['theta_min']} <= $\theta$ < {row[1]['theta_max']} & q = {row[1]['charge']}"
             for row in self.iterator
         ]
 

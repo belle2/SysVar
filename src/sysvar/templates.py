@@ -8,7 +8,7 @@ from typing import Union
 import numpy as np
 from pandas import DataFrame, concat
 
-from sysvar.corrections import BaseCorrection, Correction2DCategorical, PIDCorrection2D
+from sysvar.corrections import BaseCorrection, Correction2DCategorical, CorrectionPID
 from sysvar.variations import Variator
 from sysvar.visualize import TemplateVisualizer
 
@@ -42,7 +42,7 @@ class Template(ABC):
         if self._is_existing_variable(total_weight, df.columns):
             self.total_weight = total_weight
             columns.append(total_weight)
-        # Add the second clause to escape check for PIDCorrection2D
+        # Add the second clause to escape check for CorrectionPID
         if syst_weight is not None and not isinstance(syst_weight, dict):
             self._is_existing_variable(syst_weight, df.columns)
             columns.append(syst_weight)
@@ -50,10 +50,10 @@ class Template(ABC):
         # Make a deep copy only of the columns that are needed
         # PATCH, FIXME
         if not isinstance(correction, Correction2DCategorical) and not isinstance(
-            correction, PIDCorrection2D
+            correction, CorrectionPID
         ):
             columns.append(correction.dependant_variable)
-        elif isinstance(correction, PIDCorrection2D):
+        elif isinstance(correction, CorrectionPID):
             columns.extend(list(syst_weight.values()))
             for prefix in syst_weight.keys():
                 columns.append("_".join((prefix, correction.p)))
