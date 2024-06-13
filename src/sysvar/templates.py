@@ -194,10 +194,8 @@ class Template(ABC):
 
     def _add_variations_to_df(self, syst_weight, prefix: Union[None, str] = None):
 
-        if prefix is None:
-            queries = self.correction.queries
-        else:
-            queries = self.correction.build_queries(prefix)
+        # TODO where is the extra_cut read from?
+        queries = self.correction.build_queries(prefix)
 
         for i, (q, te) in enumerate(zip(queries, self.correction.total_error)):
             # Now add the variations of the corrections to the dataframe entries that
@@ -207,13 +205,13 @@ class Template(ABC):
             # This could only be useful for the FF stuff but there we don't
             # calculate eigenvariations ourselves
             #
-            # self.df.loc[self.df.eval(q), f"{syst_weight}_up"] = (
-            #    self.df[syst_weight] + te
-            # )
+            self.df.loc[self.df.eval(q), f"{syst_weight}_up"] = (
+                self.df[syst_weight] + te
+            )
 
-            # self.df.loc[self.df.eval(q), f"{syst_weight}_down"] = (
-            #    self.df[syst_weight] - te
-            # )
+            self.df.loc[self.df.eval(q), f"{syst_weight}_down"] = (
+                self.df[syst_weight] - te
+            )
 
             self.df.loc[
                 self.df.eval(q),
@@ -262,30 +260,36 @@ class Template(ABC):
 
         return absolute_variations
 
+    def collect_weights(self, index):
+        """Collects weights based on the provided index, handling different variations.
 
-class Template1D(Template):
-    def __init__(
-        self, df: DataFrame, binning: dict, total_weight: str, syst_weight: str
-    ):
-        raise NotImplementedError("Only 2D histograms supported  now")
+        Args:
+            index: Specifies the type of weight to collect. Can be `None`, a string such as "MC",
+                   "up", "down", or variations like "up0", "up1", ..., "up8", "down0", "down1", ..., "down8",
+                   or an integer.
 
+        Returns:
+            numpy.ndarray: An array of weights based on the specified index.
 
-class Template2D(Template):
-    def __init__(
-        self,
-        df: DataFrame,
-        binning: dict,
-        total_weight: str,
-        syst_weight: Union[None, str] = None,
-        correction: Union[None, BaseCorrection] = None,
-        variator: Union[None, Variator] = None,
-    ):
-        super().__init__(df, binning, total_weight, syst_weight, correction, variator)
+        Raises:
+            NotImplementedError: If the provided index is not supported.
 
-        self.nom_hist = self.make_hist()
+        Notes:
+            - If `index` is `None`, returns the nominal total weight.
+            - If `index` is "MC", returns the square of the total weight.
+            - For "up" and "down" variations, computes the weights with specific adjustments.
+            - Handles both string and dictionary types for `self.syst_weight`.
 
-    def make_hist(self, index: Union[None, int, str] = None) -> np.ndarray:
+        Example:
+            >>> self.collect_weights(None)
+            array([...])
 
+            >>> self.collect_weights("MC")
+            array([...])
+
+            >>> self.collect_weights("up1")
+            array([...])
+        """
         if index is None:
             # Take the nominal total weight
             weights = np.array(self.df[self.total_weight])
@@ -306,7 +310,6 @@ class Template2D(Template):
                 ) * (self.df["_".join((self.syst_weight, index))])
             else:
                 raise NotImplementedError("only MC, up and down variations implemented")
-
         else:
             # Divide with the nominal systematic weight and multiply with the varied one
             if isinstance(self.syst_weight, str):
@@ -326,6 +329,53 @@ class Template2D(Template):
                     ).product(axis=1)
                     * self.df[f"combination_var_{index}"]
                 )
+
+        return weights
+
+
+class Template1D(Template):
+    def __init__(
+        self,
+        df: DataFrame,
+        binning: dict,
+        total_weight: str,
+        syst_weight: str,
+        correction: Union[None, BaseCorrection] = None,
+        variator: Union[None, Variator] = None,
+    ):
+        super().__init__(df, binning, total_weight, syst_weight, correction, variator)
+
+        self.nom_hist = self.make_hist()
+
+    def make_hist(self, index: Union[None, int, str] = None) -> np.ndarray:
+
+        weights = self.collect_weights(index)
+
+        hist = np.histogram(
+            np.array(self.df[list(self.binning.keys())[0]]),
+            bins=list(*self.binning.values()),
+            weights=weights,
+        )
+        return hist[0].flatten(), hist[1].flatten()
+
+
+class Template2D(Template):
+    def __init__(
+        self,
+        df: DataFrame,
+        binning: dict,
+        total_weight: str,
+        syst_weight: Union[None, str] = None,
+        correction: Union[None, BaseCorrection] = None,
+        variator: Union[None, Variator] = None,
+    ):
+        super().__init__(df, binning, total_weight, syst_weight, correction, variator)
+
+        self.nom_hist = self.make_hist()
+
+    def make_hist(self, index: Union[None, int, str] = None) -> np.ndarray:
+
+        weights = self.collect_weights(index)
 
         hist = np.histogramdd(
             np.array(self.df[[*self.binning.keys()]]),
