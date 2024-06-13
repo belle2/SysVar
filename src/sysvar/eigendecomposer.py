@@ -16,7 +16,7 @@ from sysvar.corrections import (
     CorrectionPID,
 )
 from sysvar.variations import Variator
-from sysvar.templates import Template2D
+from sysvar.templates import Template1D, Template2D
 from sysvar.visualize import EigenDecomposerVisualizer
 
 import logging
@@ -209,15 +209,18 @@ class EigenDecomposer:
                 # Maybe it's okay to keep doing this w/o a fix
                 tmp_df = DataFrame(0, index=np.arange(1), columns=self.df.columns)
 
-            # FIX this defaults to Template2D logging. Make it more generic
-            t = Template2D(
+            template = self._get_template_child_class(
+                self.settings["bins"][reco_mode[1]]
+            )
+
+            t = template(
                 tmp_df,
                 self.settings["bins"][reco_mode[1]],
                 self.settings["weight"],
-                self.settings["systematics"][self.syst_effect]["weight"],
                 self.correction,
                 self.variator,
             )
+
             # FIX this defaults to Template2D logging. Make it more generic
             if not len(tmp_df) < 1:
                 logging.info("Building %s for %s", str(type(t).__name__), str(fit_ctgy))
@@ -229,6 +232,47 @@ class EigenDecomposer:
             previous_reco_mode = reco_mode
 
         return varied_templates
+
+    @staticmethod
+    def _get_template_child_class(binning):
+        """Determines the appropriate template class based on the dimensionality of the binning.
+
+        Args:
+            binning (dict): A dictionary representing the binning configuration.
+
+        Returns:
+            class: The appropriate template class (`Template1D` or `Template2D`).
+
+        Raises:
+            NotImplementedError: If the binning dimensionality is not 1D or 2D.
+
+        Example:
+            >>> binning = {'x': [0, 1, 2, 3]}
+            >>> template_class = _get_template_child_class(binning)
+            >>> template_class
+            <class 'Template1D'>
+
+            >>> binning = {'x': [0, 1, 2, 3], 'y': [0, 1, 2]}
+            >>> template_class = _get_template_child_class(binning)
+            >>> template_class
+            <class 'Template2D'>
+
+            >>> binning = {'x': [0, 1, 2, 3], 'y': [0, 1, 2], 'z': [0, 1]}
+            >>> template_class = _get_template_child_class(binning)
+            Traceback (most recent call last):
+                ...
+            NotImplementedError: Only 1D and 2D histograms are implemented so far. Please check the binning of your reconstruction channels.
+        """
+        if len(binning.keys()) == 1:
+            template = Template1D
+        elif len(binning.keys()) == 2:
+            template = Template2D
+        else:
+            raise NotImplementedError(
+                "Only 1D and 2D histograms are implemented so far. Please check the binning of your reconstruction channels."
+            )
+
+        return template
 
     def find_important_eigendimension_indices(self):
 
