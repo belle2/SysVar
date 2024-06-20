@@ -356,7 +356,7 @@ class VariatorVisualizer(Visualizer):
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
-        self._strings = self.instance.correction.strings
+        self._strings = self.instance.correction.visual_labels
 
     @property
     def strings(self) -> list:
@@ -374,7 +374,7 @@ class VariatorVisualizer(Visualizer):
             for axis in ax:
                 self._annotate_axis(axis)
 
-        fig.suptitle(f"Total covariance for {self.instance.correction.label}")
+        fig.suptitle(f"Total covariance for {self.instance.correction.title}")
 
     def _annotate_axis(self, ax):
 

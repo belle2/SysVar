@@ -31,41 +31,25 @@ class Template(ABC):
         df: DataFrame,
         binning: dict,
         total_weight: str,
-        syst_weight: Union[None, str] = None,
-        correction: Union[None, BaseCorrection] = None,
-        variator: Union[None, Variator] = None,
+        syst_weight: Union[None, str],
+        prefices: Union[str, list],
+        correction: Union[None, BaseCorrection],
+        variator: Union[None, Variator],
     ):
-        columns = []
         if self._is_correct_binning(df.columns, binning):
             self.binning = binning
-            columns.extend(list(binning.keys()))
         if self._is_existing_variable(total_weight, df.columns):
             self.total_weight = total_weight
-            columns.append(total_weight)
-        # Add the second clause to escape check for CorrectionPID
-        if syst_weight is not None and not isinstance(syst_weight, dict):
-            self._is_existing_variable(syst_weight, df.columns)
-            columns.append(syst_weight)
-        self.syst_weight = syst_weight
-        # Make a deep copy only of the columns that are needed
-        # PATCH, FIXME
-        if not isinstance(correction, Correction2DCategorical) and not isinstance(
-            correction, CorrectionPID
-        ):
-            columns.append(correction.dependant_variable)
-        elif isinstance(correction, CorrectionPID):
-            columns.extend(list(syst_weight.values()))
-            for prefix in syst_weight.keys():
-                columns.append("_".join((prefix, correction.p)))
-                columns.append("_".join((prefix, correction.theta)))
-                columns.append("_".join((prefix, correction.PDG)))
-                columns.append("_".join((prefix, correction.mcPDG)))
-        else:
-            columns.append(correction.categorical_variable)
-            columns.append(correction.continuus_variable)
-            columns.extend(correction.extra_variables)
-        self.df = df[columns].copy(deep=True)
 
+        # TODO have a method that build the column name e.g. from prefix and syst_weight and
+        # add a check of is_existing_variable
+        self.syst_weight = syst_weight
+        self.prefices = prefices
+
+        # Here the deep copy ensures that we're not affecting the original dataframe
+        self.df = df.copy(deep=True)
+        # TODO Make a deep copy only of the columns that are needed
+        # But for large dataframes we don't need to copy all these GB. only a handful of columns are necessary.
         self.correction = correction
         self.variator = variator
         self.Nvar = variator.Nvar if variator is not None else variator
@@ -173,24 +157,25 @@ class Template(ABC):
 
     def add_variations(self):
 
-        if isinstance(self.syst_weight, str):
-            syst_weight = self.syst_weight
-            self._initialize_variations(syst_weight)
-            self._add_variations_to_df(syst_weight)
-        elif isinstance(self.syst_weight, dict):
-            for prefix, syst_weight in self.syst_weight.items():
-                self._initialize_variations(syst_weight)
-                self._add_variations_to_df(syst_weight, prefix)
+        if isinstance(self.prefices, str):
+            self._initialize_variations(self.syst_weight, self.prefices)
+            self._add_variations_to_df(self.syst_weight, self.prefices)
+        elif isinstance(self.prefices, list):
+            # Leaving this hear to remember I probably need to combine multiple variations at the end
+            # self._combine_variations()
+            raise NotImplementedError(
+                "Only one prefix at a time currently! Revisit this for HID and pi0s"
+            )
 
-            self._combine_variations()
-
-    def _initialize_variations(self, syst_weight):
+    def _initialize_variations(self, syst_weight, prefix):
         # Initialize the nominal up and down variations
-        self.df.loc[:, f"{syst_weight}_up"] = 1
-        self.df.loc[:, f"{syst_weight}_down"] = 1
+        self.df.loc[:, f"{prefix}_{syst_weight}_up"] = 1
+        self.df.loc[:, f"{prefix}_{syst_weight}_down"] = 1
 
         # Initialize the variations
-        self.df.loc[:, [f"{syst_weight}_var_{i}" for i in range(self.Nvar)]] = 1
+        self.df.loc[
+            :, [f"{prefix}_{syst_weight}_var_{i}" for i in range(self.Nvar)]
+        ] = 1
 
     def _add_variations_to_df(self, syst_weight, prefix: Union[None, str] = None):
 
@@ -206,23 +191,16 @@ class Template(ABC):
             # calculate eigenvariations ourselves
             #
             self.df.loc[self.df.eval(q), f"{syst_weight}_up"] = (
-                self.df[syst_weight] + te
+                self.df["_".join([self.prefices, self.syst_weight])] + te
             )
 
             self.df.loc[self.df.eval(q), f"{syst_weight}_down"] = (
-                self.df[syst_weight] - te
+                self.df["_".join([self.prefices, self.syst_weight])] - te
             )
 
             self.df.loc[
                 self.df.eval(q),
-                [
-                    (
-                        f"{prefix}_{syst_weight}_var_{j}"
-                        if prefix is not None
-                        else f"{syst_weight}_var_{j}"
-                    )
-                    for j in range(self.Nvar)
-                ],
+                [f"{prefix}_{syst_weight}_var_{j}" for j in range(self.Nvar)],
             ] = self.variator.variations[:, i]
 
     def _combine_variations(self):
@@ -305,29 +283,32 @@ class Template(ABC):
             ):
                 # PATCH
                 # Now I'm replacing 0s with 1s to avoid NANs in the histogram
-                weights = (
-                    self.df[self.total_weight] / self.df[self.syst_weight].replace(0, 1)
-                ) * (self.df["_".join((self.syst_weight, index))])
+                if isinstance(self.prefices, str):
+                    # PATCH
+                    syst_weight = "_".join([self.prefices, self.syst_weight])
+                    weights = (
+                        self.df[self.total_weight] / self.df[syst_weight].replace(0, 1)
+                    ) * (self.df["_".join((syst_weight, index))])
+                else:
+                    raise NotImplementedError(
+                        "Only one prefix at a time currently! Revisit this for HID and pi0s"
+                    )
+
             else:
                 raise NotImplementedError("only MC, up and down variations implemented")
         else:
             # Divide with the nominal systematic weight and multiply with the varied one
-            if isinstance(self.syst_weight, str):
+            if isinstance(self.prefices, str):
+                # PATCH
+                syst_weight = "_".join([self.prefices, self.syst_weight])
                 weights = np.array(
-                    (
-                        self.df[self.total_weight]
-                        / self.df[self.syst_weight].replace(0, 1)
-                    )
-                    * self.df[f"{self.syst_weight}_var_{index}"]
+                    (self.df[self.total_weight] / self.df[syst_weight].replace(0, 1))
+                    * self.df[f"{syst_weight}_var_{index}"]
                 )
 
-            elif isinstance(self.syst_weight.values(), dict):
-                weights = np.array(
-                    (
-                        self.df[self.total_weight]
-                        / self.df[self.syst_weight].replace(0, 1)
-                    ).product(axis=1)
-                    * self.df[f"combination_var_{index}"]
+            else:
+                raise NotImplementedError(
+                    "Only one prefix at a time currently! Revisit this for HID and pi0s"
                 )
 
         return weights
@@ -340,10 +321,13 @@ class Template1D(Template):
         binning: dict,
         total_weight: str,
         syst_weight: str,
+        prefices: Union[str, list] = None,
         correction: Union[None, BaseCorrection] = None,
         variator: Union[None, Variator] = None,
     ):
-        super().__init__(df, binning, total_weight, syst_weight, correction, variator)
+        super().__init__(
+            df, binning, total_weight, syst_weight, prefices, correction, variator
+        )
 
         self.nom_hist = self.make_hist()
 
@@ -366,10 +350,13 @@ class Template2D(Template):
         binning: dict,
         total_weight: str,
         syst_weight: Union[None, str] = None,
+        prefices: Union[str, list] = None,
         correction: Union[None, BaseCorrection] = None,
         variator: Union[None, Variator] = None,
     ):
-        super().__init__(df, binning, total_weight, syst_weight, correction, variator)
+        super().__init__(
+            df, binning, total_weight, syst_weight, prefices, correction, variator
+        )
 
         self.nom_hist = self.make_hist()
 

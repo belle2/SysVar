@@ -1,5 +1,6 @@
 import itertools
 from functools import cached_property
+from typing import Union, List
 
 from tqdm import tqdm
 
@@ -19,6 +20,8 @@ from sysvar.variations import Variator
 from sysvar.templates import Template1D, Template2D
 from sysvar.visualize import EigenDecomposerVisualizer
 
+from sysvar.utils import read_yaml
+
 import logging
 
 logging.basicConfig(
@@ -34,11 +37,9 @@ class EigenDecomposer:
         self.settings = settings
         self.syst_effect = syst_effect
 
-        correction_obj = self._get_correction_object(
-            settings["systematics"][syst_effect]["correction_type"]
-        )
+        correction_obj = self._get_correction_object()
         self.correction = correction_obj(
-            systematic=syst_effect,
+            systematic=self.syst_effect,
             MC_production=settings["MC_prod"],
         )
         self.variator = Variator(self.correction, Nvar=settings["Nvar"])
@@ -69,19 +70,78 @@ class EigenDecomposer:
             )
         self._save_figures = value
 
-    @cached_property
+    @property
     def decay_modes(self) -> list:
         return [
-            (reco_mode, treename)
-            for reco_mode, treename in zip(
-                self.settings["systematics"][self.syst_effect]["regions"],
-                self.settings["systematics"][self.syst_effect]["tree_names"],
-            )
+            (self.settings["reco_channels"][reco_channel], reco_channel)
+            for reco_channel in self._determine_reco_channels()
         ]
 
-    @cached_property
-    def fit_ctgies(self) -> list:
-        return [fit_ctgy for fit_ctgy in self.settings["fit_ctgies"]]
+    @property
+    def _included_channels(self) -> Union[str, List[str]]:
+        """Retrieves the list of included reconstruction channels for the current systematic effect.
+
+        Returns:
+            Union[str, List[str]]: A list of included channels or a single channel as a string.
+
+        Notes:
+            - If no channels are explicitly included, returns all available reconstruction channels.
+
+        Example:
+            >>> self._included_channels
+            ['channel1', 'channel2']
+        """
+        if (
+            self.settings["systematics"][self.syst_effect]["reco_channels"]["include"]
+            is None
+        ):
+            return list(self.settings["reco_channels"].keys())
+        else:
+            return self.settings["systematics"][self.syst_effect]["reco_channels"][
+                "include"
+            ]
+
+    @property
+    def _excluded_channels(self) -> Union[None, str, List[str]]:
+        """Retrieves the list of excluded reconstruction channels for the current systematic effect.
+
+        Returns:
+            Union[None, str, List[str]]: A list of excluded channels, a single channel as a string, or an empty list if none are excluded.
+
+        Example:
+            >>> self._excluded_channels
+            ['channel3', 'channel4']
+        """
+        if (
+            self.settings["systematics"][self.syst_effect]["reco_channels"]["exclude"]
+            is None
+        ):
+            return []
+        else:
+            return self.settings["systematics"][self.syst_effect]["reco_channels"][
+                "exclude"
+            ]
+
+    def _determine_reco_channels(self) -> List[str]:
+        """Determines the final list of reconstruction channels to be used, based on inclusion and exclusion criteria.
+
+        Returns:
+            List[str]: A list of reconstruction channel names that are included and not excluded.
+
+        Example:
+            >>> self._determine_reco_channels()
+            ['channel1', 'channel2']
+        """
+        return [
+            reco_channel_name
+            for reco_channel_name in self.settings["reco_channels"].keys()
+            if reco_channel_name in self._included_channels
+            and reco_channel_name not in self._excluded_channels
+        ]
+
+    @property
+    def template_names(self) -> list:
+        return [template_name for template_name in self.settings["templates"]]
 
     @property
     def Nbins(self) -> int:
@@ -99,14 +159,14 @@ class EigenDecomposer:
     def iterator(self) -> itertools.product:
         # Making this a propery to ensure that the iterations are always the same
         # This avoids inconsistencies when creating the templates and when saving them
-        return itertools.product(self.decay_modes, self.fit_ctgies)
+        return itertools.product(self.decay_modes, self.template_names)
 
     @property
     def enumerated_iterator(self) -> itertools.product:
         # Making this a propery to ensure that the iterations are always the same
         # This avoids inconsistencies when creating the templates and when saving them
         return itertools.product(
-            enumerate(self.decay_modes), enumerate(self.fit_ctgies)
+            enumerate(self.decay_modes), enumerate(self.template_names)
         )
 
     @cached_property
@@ -173,8 +233,7 @@ class EigenDecomposer:
     def var2cov(mat) -> np.ndarray:
         return np.outer(mat, mat)
 
-    @staticmethod
-    def _get_correction_object(corr_type):
+    def _get_correction_object(self) -> BaseCorrection:
 
         correction_types = {
             "1D": Correction1D,
@@ -182,6 +241,11 @@ class EigenDecomposer:
             "BF": CorrectionBF,
             "PID": CorrectionPID,
         }
+
+        corr_type = read_yaml(self.syst_effect, self.settings["MC_prod"])[
+            "correction_type"
+        ]
+
         try:
             return correction_types[corr_type]
         except KeyError:
@@ -191,7 +255,7 @@ class EigenDecomposer:
 
         previous_reco_mode = None
         varied_templates = []
-        for reco_mode, fit_ctgy in self.iterator:
+        for reco_mode, template_name in self.iterator:
 
             if reco_mode != previous_reco_mode:
                 logging.info(
@@ -199,11 +263,11 @@ class EigenDecomposer:
                 )
 
             tmp_df = self.df.query(
-                f"{self.settings['region_id_column']} in @reco_mode[0] & {self.settings['ctgy_id_column']} == '{fit_ctgy}'"
+                f"{self.settings['reco_channel_id_column']} in @reco_mode[0] & {self.settings['template_id_column']} == '{template_name}'"
             )
             # Skip template create if the query yields an empty dataframe
             if len(tmp_df) < 1:
-                logging.warn("Skipping template %s", str(fit_ctgy))
+                logging.warn("Skipping template %s", str(template_name))
                 # PATCH FIX
                 # This just creates an empty dataframe so that Template2D doesn't fail.
                 # Maybe it's okay to keep doing this w/o a fix
@@ -214,16 +278,20 @@ class EigenDecomposer:
             )
 
             t = template(
-                tmp_df,
-                self.settings["bins"][reco_mode[1]],
-                self.settings["weight"],
-                self.correction,
-                self.variator,
+                df=tmp_df,
+                binning=self.settings["bins"][reco_mode[1]],
+                total_weight=self.settings["total_weight"],
+                syst_weight=self.settings["systematics"][self.syst_effect]["weight"],
+                prefices=self.settings["systematics"][self.syst_effect]["prefices"],
+                correction=self.correction,
+                variator=self.variator,
             )
 
             # FIX this defaults to Template2D logging. Make it more generic
             if not len(tmp_df) < 1:
-                logging.info("Building %s for %s", str(type(t).__name__), str(fit_ctgy))
+                logging.info(
+                    "Building %s for %s", str(type(t).__name__), str(template_name)
+                )
 
             t.add_variations()
 
@@ -365,7 +433,7 @@ class EigenDecomposer:
 
         return self.eigen_variations[:, self.important_dims_indices].reshape(
             len(self.decay_modes),
-            len(self.fit_ctgies),
+            len(self.template_names),
             self.Nbins,
             self.N_important_dims,
         )
@@ -378,8 +446,12 @@ class EigenDecomposer:
 
         # FIX there needs to be a check here to not recreate the file if it already exists or has nominal templates.
         # Now the user needs to be careful to not mess up the file and lose previously written nominals
-        with uproot.recreate(self.settings["filename"], compression=None) as newfile:
-            logging.info("Recreate file with uproot: %s", self.settings["filename"])
+        with uproot.recreate(
+            self.settings["output_filepath"], compression=None
+        ) as newfile:
+            logging.info(
+                "Recreate file with uproot: %s", self.settings["output_filepath"]
+            )
 
             previous_tree = None
 
@@ -403,8 +475,10 @@ class EigenDecomposer:
 
     def save_template_variations(self):
 
-        with uproot.update(self.settings["filename"]) as newfile:
-            logging.info("Updating file with uproot: %s", self.settings["filename"])
+        with uproot.update(self.settings["output_filepath"]) as newfile:
+            logging.info(
+                "Updating file with uproot: %s", self.settings["output_filepath"]
+            )
 
             previous_tree = None
 
