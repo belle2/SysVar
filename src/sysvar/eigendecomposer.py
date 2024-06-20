@@ -274,11 +274,17 @@ class EigenDecomposer:
 
         return template
 
-    def find_important_eigendimension_indices(self):
+    def find_important_eigendimension_indices(self, method: str = "max_differences"):
 
-        important_dims = (
-            np.asarray(self.max_differences) / self.cov.max() > self.precision
-        )
+        if method == "max_differences":
+            important_dims = self._calculate_max_differences()
+
+        elif method == "trace":
+            important_dims = self._calculate_trace()
+        else:
+            raise NotImplementedError(
+                f"Available methods are: max_differences and trace"
+            )
 
         self.N_important_dims = np.sum(important_dims)
         self.important_dims_indices = important_dims
@@ -287,6 +293,73 @@ class EigenDecomposer:
             self.N_important_dims,
             self.precision,
         )
+
+    def _calculate_max_differences(self):
+        """
+        Calculate the important dimensions based on maximum differences.
+
+        This method identifies the important dimensions by comparing the maximum differences
+        (scaled by the maximum value of the covariance matrix) to a specified precision threshold.
+
+        Returns:
+            list: A list of boolean values indicating the important dimensions. The length of the list
+            corresponds to the number of maximum differences, with `True` indicating an important dimension
+            and `False` indicating otherwise.
+
+        Attributes:
+            max_differences (array-like): The maximum differences for each dimension.
+            cov (array-like): The covariance matrix.
+            precision (float): The precision threshold for determining the important dimensions.
+
+        Example:
+            >>> self.max_differences = [0.2, 0.5, 0.8]
+            >>> self.cov = np.array([[1, 0.1], [0.1, 1]])
+            >>> self.precision = 0.1
+            >>> self._calculate_max_differences()
+            [True, True, True]
+        """
+
+        important_dims = (
+            np.asarray(self.max_differences) / self.cov.max() > self.precision
+        )
+        return important_dims
+
+    def _calculate_trace(self):
+        """
+        Calculate the trace and determine the important dimensions based on eigenvalues.
+
+        This method computes the total trace by summing the square roots of the eigenvalues.
+        It then iteratively computes the truncated trace by adding the square root of each eigenvalue
+        and normalizes it by the total trace. When the normalized trace exceeds the specified precision,
+        it identifies the number of important dimensions.
+
+        Returns:
+            list: A list of boolean values indicating the important dimensions. The length of the list
+            corresponds to the number of eigenvalues, with `True` indicating an important dimension
+            and `False` indicating otherwise.
+
+        Attributes:
+            eigen_values (array-like): The eigenvalues of the matrix.
+            precision (float): The precision threshold for determining the important dimensions.
+
+        Example:
+            >>> self.eigen_values = [4, 1, 0.5]
+            >>> self.precision = 0.95
+            >>> self._calculate_trace()
+            [True, True]
+        """
+
+        total_trace = np.sum(np.sqrt(self.eigen_values))
+        truncated_trace = 0
+
+        for i in range(1, len(self.eigen_values) + 1):
+            truncated_trace += np.sqrt(self.eigen_values[i - 1])
+            normalized_trace = truncated_trace / total_trace
+
+            if normalized_trace / total_trace > self.precision:
+                important_dims = [True] * i
+                break
+        return important_dims
 
     def _get_unrolled_variations(self):
 
