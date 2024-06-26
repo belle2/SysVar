@@ -1,6 +1,6 @@
 import itertools
 from functools import cached_property
-from typing import Union, List
+from typing import List
 
 from tqdm import tqdm
 
@@ -78,11 +78,11 @@ class EigenDecomposer:
         ]
 
     @property
-    def _included_channels(self) -> Union[str, List[str]]:
+    def _included_channels(self) -> str | List[str]:
         """Retrieves the list of included reconstruction channels for the current systematic effect.
 
         Returns:
-            Union[str, List[str]]: A list of included channels or a single channel as a string.
+            str | List[str]: A list of included channels or a single channel as a string.
 
         Notes:
             - If no channels are explicitly included, returns all available reconstruction channels.
@@ -102,11 +102,11 @@ class EigenDecomposer:
             ]
 
     @property
-    def _excluded_channels(self) -> Union[None, str, List[str]]:
+    def _excluded_channels(self) -> None | str | List[str]:
         """Retrieves the list of excluded reconstruction channels for the current systematic effect.
 
         Returns:
-            Union[None, str, List[str]]: A list of excluded channels, a single channel as a string, or an empty list if none are excluded.
+            None | str | List[str]: A list of excluded channels, a single channel as a string, or an empty list if none are excluded.
 
         Example:
             >>> self._excluded_channels

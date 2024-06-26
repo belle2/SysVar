@@ -3,7 +3,6 @@ from __future__ import annotations
 from functools import cached_property
 
 from abc import ABC, abstractmethod
-from typing import Union
 
 import numpy as np
 from pandas import DataFrame, concat
@@ -31,10 +30,10 @@ class Template(ABC):
         df: DataFrame,
         binning: dict,
         total_weight: str,
-        syst_weight: Union[None, str],
-        prefices: Union[str, list],
-        correction: Union[None, BaseCorrection],
-        variator: Union[None, Variator],
+        syst_weight: None | str,
+        prefices: str | list,
+        correction: None | BaseCorrection,
+        variator: None | Variator,
     ):
         if self._is_correct_binning(df.columns, binning):
             self.binning = binning
@@ -152,7 +151,7 @@ class Template(ABC):
         return True
 
     @abstractmethod
-    def make_hist(self, index: Union[None, int] = None) -> np.ndarray:
+    def make_hist(self, index: None | int = None) -> np.ndarray:
         pass
 
     def add_variations(self):
@@ -177,7 +176,7 @@ class Template(ABC):
             :, [f"{prefix}_{syst_weight}_var_{i}" for i in range(self.Nvar)]
         ] = 1
 
-    def _add_variations_to_df(self, syst_weight, prefix: Union[None, str] = None):
+    def _add_variations_to_df(self, syst_weight, prefix: None | str = None):
 
         # TODO where is the extra_cut read from?
         queries = self.correction.build_queries(prefix)
@@ -321,9 +320,9 @@ class Template1D(Template):
         binning: dict,
         total_weight: str,
         syst_weight: str,
-        prefices: Union[str, list] = None,
-        correction: Union[None, BaseCorrection] = None,
-        variator: Union[None, Variator] = None,
+        prefices: str | list = None,
+        correction: None | BaseCorrection = None,
+        variator: None | Variator = None,
     ):
         super().__init__(
             df, binning, total_weight, syst_weight, prefices, correction, variator
@@ -331,7 +330,7 @@ class Template1D(Template):
 
         self.nom_hist = self.make_hist()
 
-    def make_hist(self, index: Union[None, int, str] = None) -> np.ndarray:
+    def make_hist(self, index: None | int | str = None) -> np.ndarray:
 
         weights = self.collect_weights(index)
 
@@ -349,10 +348,10 @@ class Template2D(Template):
         df: DataFrame,
         binning: dict,
         total_weight: str,
-        syst_weight: Union[None, str] = None,
-        prefices: Union[str, list] = None,
-        correction: Union[None, BaseCorrection] = None,
-        variator: Union[None, Variator] = None,
+        syst_weight: None | str = None,
+        prefices: str | list = None,
+        correction: None | BaseCorrection = None,
+        variator: None | Variator = None,
     ):
         super().__init__(
             df, binning, total_weight, syst_weight, prefices, correction, variator
@@ -360,7 +359,7 @@ class Template2D(Template):
 
         self.nom_hist = self.make_hist()
 
-    def make_hist(self, index: Union[None, int, str] = None) -> np.ndarray:
+    def make_hist(self, index: None | int | str = None) -> np.ndarray:
 
         weights = self.collect_weights(index)
 

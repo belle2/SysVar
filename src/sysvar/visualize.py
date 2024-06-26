@@ -13,7 +13,7 @@ from datetime import datetime
 from os import path, makedirs
 import math
 
-from typing import Union, Iterable
+from typing import Iterable
 
 from abc import ABC, abstractmethod
 
@@ -37,8 +37,8 @@ class Visualizer(ABC):
         instance: BaseCorrection,
         namespace: list = None,
         top_dir: str = None,
-        dir_spec: Union[str, None, bool] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None | bool = None,
+        extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
 
@@ -159,7 +159,7 @@ class Visualizer(ABC):
         ax: Axes,
         x: np.ndarray,
         variation: np.ndarray,
-        index: Union[None, int] = None,
+        index: None | int = None,
         plot_func: str = "step",
     ):
         """
@@ -211,8 +211,8 @@ class CorrectionVisualizer(Visualizer):
         instance: BaseCorrection,
         namespace: list,
         top_dir: str,
-        dir_spec: Union[str, None] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None = None,
+        extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
@@ -278,8 +278,8 @@ class UncertaintyVisualizer(Visualizer):
         instance: Uncertainty,
         namespace: list,
         top_dir: str,
-        dir_spec: Union[str, None] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None = None,
+        extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
@@ -310,7 +310,7 @@ class UncertaintyVisualizer(Visualizer):
             rotation=0,
         )
 
-    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+    def plot_cov_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -326,7 +326,7 @@ class UncertaintyVisualizer(Visualizer):
 
         return ax
 
-    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+    def plot_corr_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -351,8 +351,8 @@ class VariatorVisualizer(Visualizer):
         instance: Variator,
         namespace: list,
         top_dir: str,
-        dir_spec: Union[str, None] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None = None,
+        extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
@@ -397,7 +397,7 @@ class VariatorVisualizer(Visualizer):
             rotation=(0 if isinstance(self.instance.correction, CorrectionBF) else 0),
         )
 
-    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+    def plot_cov_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -413,7 +413,7 @@ class VariatorVisualizer(Visualizer):
 
         return ax
 
-    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+    def plot_corr_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -539,8 +539,8 @@ class TemplateVisualizer(Visualizer):
         instance: Template,
         namespace: list,
         top_dir: str,
-        dir_spec: Union[str, None] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None = None,
+        extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
@@ -601,7 +601,7 @@ class TemplateVisualizer(Visualizer):
 
         return ax
 
-    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+    def plot_cov_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -621,7 +621,7 @@ class TemplateVisualizer(Visualizer):
 
         return ax
 
-    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+    def plot_corr_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -640,7 +640,7 @@ class TemplateVisualizer(Visualizer):
 
         return ax
 
-    def plot_nominal_template(self, ax: Union[Axes, None] = None):
+    def plot_nominal_template(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -688,7 +688,7 @@ class TemplateVisualizer(Visualizer):
 
         return fig, ax
 
-    def plot_up_and_down_variations(self, ax: Union[np.ndarray, None] = None):
+    def plot_up_and_down_variations(self, ax: np.ndarray | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -756,7 +756,7 @@ class TemplateVisualizer(Visualizer):
                 # Don't save the plot if this is a part of a bigger plot
                 pass
 
-    def plot_eigenvalues(self, ax: Union[np.ndarray, None] = None):
+    def plot_eigenvalues(self, ax: np.ndarray | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -829,8 +829,8 @@ class FFModelVisualizer(Visualizer):
         instance: Template,
         namespace: list,
         top_dir: str,
-        dir_spec: Union[str, None] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None = None,
+        extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
@@ -857,7 +857,7 @@ class FFModelVisualizer(Visualizer):
             self.instance.params.keys(),
         )
 
-    def plot_cov_matrix(self, ax: Union[Axes, None] = None):
+    def plot_cov_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -874,7 +874,7 @@ class FFModelVisualizer(Visualizer):
 
         return ax
 
-    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+    def plot_corr_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -904,7 +904,7 @@ class FFModelVisualizer(Visualizer):
 
         return ax
 
-    def plot_params(self, ax: Union[Axes, None] = None):
+    def plot_params(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -959,8 +959,8 @@ class EigenDecomposerVisualizer(Visualizer):
         instance: EigenDecomposer,
         namespace: list,
         top_dir: str,
-        dir_spec: Union[str, None] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None = None,
+        extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
         super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
@@ -981,7 +981,7 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.set_xlabel("Templates/Bins")
         ax.set_ylabel("Templates/Bins")
 
-    def plot_corr_matrix(self, ax: Union[Axes, None] = None):
+    def plot_corr_matrix(self, ax: Axes | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -998,7 +998,7 @@ class EigenDecomposerVisualizer(Visualizer):
 
         return ax
 
-    def plot_eigenvalues(self, ax: Union[np.ndarray, None] = None):
+    def plot_eigenvalues(self, ax: np.ndarray | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -1039,7 +1039,7 @@ class EigenDecomposerVisualizer(Visualizer):
         ax_right.set_yscale("log")
         ax_right.set_ylabel(r"max($\frac{|Cov - Cov^{'}|}{Cov}$)", color="#07529aff")
 
-    def plot_cov_diff(self, ax: Union[np.ndarray, None] = None):
+    def plot_cov_diff(self, ax: np.ndarray | None = None):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
