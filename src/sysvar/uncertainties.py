@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Iterable, Union, List
+from typing import Iterable, List
 
 import numpy as np
 
@@ -72,7 +72,7 @@ class Uncertainty(ABC):
         """
         pass
 
-    def _is_valid_input_errors(self, errors) -> Union[None, bool]:
+    def _is_valid_input_errors(self, errors) -> None | bool:
         """
         Validate the input errors.
 
@@ -80,7 +80,7 @@ class Uncertainty(ABC):
             errors: The input error values.
 
         Returns:
-            Union[None, bool]: True if the errors are valid, otherwise None.
+            None | bool: True if the errors are valid, otherwise None.
 
         Raises:
             NotAnArrayError: If errors is not an instance of np.ndarray.

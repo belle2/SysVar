@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Iterable, Union
+from typing import Iterable
 
 import numpy as np
 
@@ -160,8 +160,8 @@ class Variator(ABC):
         self,
         namespace: list = None,
         top_dir: str = None,
-        dir_spec: Union[str, None, bool] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None | bool = None,
+        extra_ext: str | Iterable | None = None,
     ):
 
         self.figure_save_info = {

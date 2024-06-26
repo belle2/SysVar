@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Iterable, Union, Optional
+from typing import List, Iterable, Optional
 from os import path
 
 from particle import Particle
@@ -99,7 +99,7 @@ class BaseCorrection(ABC):
         pass
 
     @staticmethod
-    def _build_column_name(prefix: Union[str, None], variable: str) -> str:
+    def _build_column_name(prefix: str | None, variable: str) -> str:
         """
         Constructs a column name by combining a prefix and a variable name.
 
@@ -109,7 +109,7 @@ class BaseCorrection(ABC):
         the prefix is `None`, the column name will simply be the variable name.
 
         Args:
-            prefix (Union[str, None]): An optional string to prepend to the variable name. If `None`, no prefix is added.
+            prefix (str | None): An optional string to prepend to the variable name. If `None`, no prefix is added.
            variable (str): The variable name to use for constructing the column name.
 
         Returns:
@@ -203,8 +203,8 @@ class BaseCorrection(ABC):
         self,
         namespace: list = None,
         top_dir: str = None,
-        dir_spec: Union[str, None, bool] = None,
-        extra_ext: Union[str, Iterable, None] = None,
+        dir_spec: str | None | bool = None,
+        extra_ext: str | Iterable | None = None,
     ):
 
         self.figure_save_info = {
@@ -236,7 +236,7 @@ class BaseCorrection(ABC):
         self.visualizer = CorrectionVisualizer(self, **self.figure_save_info)
         self.visualizer.plot_error_comparison()
 
-    def plot_uncertainty(self, unc_name: Union(str, None) = None):
+    def plot_uncertainty(self, unc_name: str | None = None):
         self._check_saving_status()
         if unc_name is None:
             for unc_obj in self.uncertainties.values():
@@ -254,7 +254,7 @@ class BaseCorrection(ABC):
 @dataclass
 class Correction1D(BaseCorrection):
 
-    dependant_variable: Union[str, None] = None
+    dependant_variable: str | None = None
     central_values: Iterable = None
     lower_bounds: Iterable = None
     upper_bounds: Iterable = None
@@ -288,7 +288,7 @@ class Correction1D(BaseCorrection):
         ]
 
     def build_queries(
-        self, prefix: Union[str, None] = None, extra_cut: Union[str, None] = None
+        self, prefix: str | None = None, extra_cut: str | None = None
     ) -> list:
 
         column_name = self._build_column_name(prefix, self.dependant_variable)
@@ -305,8 +305,8 @@ class Correction1D(BaseCorrection):
 @dataclass
 class Correction2DCategorical(BaseCorrection):
 
-    categorical_variable: Union[str, None] = None
-    continuus_variable: Union[str, None] = None
+    categorical_variable: str | None = None
+    continuus_variable: str | None = None
     central_values: Iterable = None
     continuus_edges: Iterable = None
     categorical_values: Iterable = None
@@ -357,7 +357,7 @@ class Correction2DCategorical(BaseCorrection):
 @dataclass
 class CorrectionBF(BaseCorrection):
 
-    dependant_variable: Union[str, None] = None
+    dependant_variable: str | None = None
     central_values: Iterable = None
     visual_labels: Iterable = None
     uncertainties: dict = field(default_factory=dict)
@@ -428,7 +428,7 @@ class CorrectionBF(BaseCorrection):
         )
 
     def build_queries(
-        self, prefix: Union[str, None] = None, extra_cut: Union[str, None] = None
+        self, prefix: str | None = None, extra_cut: str | None = None
     ) -> list:
 
         column_name = self._build_column_name(prefix, self.dependant_variable)
@@ -541,7 +541,7 @@ class CorrectionPID(BaseCorrection):
         pass
 
     def build_queries(
-        self, prefix: Union[str, None] = None, extra_cut: Union[str, None] = None
+        self, prefix: str | None = None, extra_cut: str | None = None
     ) -> List[str]:
 
         p_column_name = self._build_column_name(prefix, self.p)
