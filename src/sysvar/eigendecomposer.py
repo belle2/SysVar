@@ -9,13 +9,7 @@ from pandas import DataFrame
 
 import uproot
 
-from sysvar.corrections import (
-    BaseCorrection,
-    CorrectionBF,
-    Correction1D,
-    Correction2DCategorical,
-    CorrectionPID,
-)
+from sysvar.corrections import create_correction_object
 from sysvar.variations import Variator
 from sysvar.templates import Template1D, Template2D
 from sysvar.visualize import EigenDecomposerVisualizer
@@ -37,11 +31,7 @@ class EigenDecomposer:
         self.settings = settings
         self.syst_effect = syst_effect
 
-        correction_obj = self._get_correction_object()
-        self.correction = correction_obj(
-            systematic=self.syst_effect,
-            MC_production=settings["MC_prod"],
-        )
+        self.correction = create_correction_object(syst_effect, settings["MC_prod"])
         self.variator = Variator(self.correction, Nvar=settings["Nvar"])
         self.templates = self._create_varied_templates()
         self.N_important_dims = 0
@@ -232,24 +222,6 @@ class EigenDecomposer:
     @staticmethod
     def var2cov(mat) -> np.ndarray:
         return np.outer(mat, mat)
-
-    def _get_correction_object(self) -> BaseCorrection:
-
-        correction_types = {
-            "1D": Correction1D,
-            "2DCategorical": Correction2DCategorical,
-            "BF": CorrectionBF,
-            "PID": CorrectionPID,
-        }
-
-        corr_type = read_yaml(self.syst_effect, self.settings["MC_prod"])[
-            "correction_type"
-        ]
-
-        try:
-            return correction_types[corr_type]
-        except KeyError:
-            raise NotImplementedError(f"Available corrections are: {correction_types}")
 
     def _create_varied_templates(self):
 
