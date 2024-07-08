@@ -157,26 +157,49 @@ class Template(ABC):
     def add_variations(self):
 
         if isinstance(self.prefices, str):
-            self._initialize_variations(self.syst_weight, self.prefices)
-            self._add_variations_to_df(self.syst_weight, self.prefices)
+            # If we are dealing with a single column, just build the name and add the variations
+            weightname = self.correction._build_column_name(
+                self.prefices, self.syst_weight
+            )
+            self._initialize_variations(weightname)
+            self._add_variations_to_df(weightname, self.prefices)
         elif isinstance(self.prefices, list):
-            # Leaving this hear to remember I probably need to combine multiple variations at the end
-            # self._combine_variations()
-            raise NotImplementedError(
-                "Only one prefix at a time currently! Revisit this for HID and pi0s"
+            # For multuple columns we need to loop over all the prefices.
+            # Assumes that all the weights have the same name
+            for prefix in self.prefices:
+                # Now build the weightname
+                weightname = self.correction._build_column_name(
+                    prefix, self.syst_weight
+                )
+                # And initialize and add all the variations
+                self._initialize_variations(weightname)
+                self._add_variations_to_df(weightname, prefix)
+
+        elif self.prefices is None:
+            raise ValueError("Prefices have not been defined. How do we treat this ? ")
+        else:
+            raise ValueError(
+                f"The prefices must be str or a list of str. You passed {type(self.prefices)}"
             )
 
-    def _initialize_variations(self, syst_weight, prefix):
+    def _initialize_variations(self, weightname: str):
         # Initialize the nominal up and down variations
-        self.df.loc[:, f"{prefix}_{syst_weight}_up"] = 1
-        self.df.loc[:, f"{prefix}_{syst_weight}_down"] = 1
+        self.df[f"{weightname}_up"] = 1.0
+        self.df[f"{weightname}_down"] = 1.0
 
         # Initialize the variations
-        self.df.loc[
-            :, [f"{prefix}_{syst_weight}_var_{i}" for i in range(self.Nvar)]
-        ] = 1
+        # Create a new dataframe ana concatenate it to avoid PerformanceWarning
+        variation_columns = [f"{weightname}_var_{i}" for i in range(self.Nvar)]
+        variations = DataFrame(
+            data=np.ones((len(self.df), len(variation_columns))),
+            columns=variation_columns,
+        )
+        # The index needs to be reseted, otherwise pandas will create extra rows
+        # Here we overwrite the Templates dataframe
+        # This is okay since this is only a copy of the original dataframe passed by the user.
+        self.df = concat([self.df.reset_index(), variations], axis=1)
 
-    def _add_variations_to_df(self, syst_weight, prefix: None | str = None):
+    def _add_variations_to_df(self, weightname: str, prefix: None | str = None):
 
         # TODO where is the extra_cut read from?
         queries = self.correction.build_queries(prefix)
@@ -189,17 +212,15 @@ class Template(ABC):
             # This could only be useful for the FF stuff but there we don't
             # calculate eigenvariations ourselves
             #
-            self.df.loc[self.df.eval(q), f"{syst_weight}_up"] = (
-                self.df["_".join([self.prefices, self.syst_weight])] + te
-            )
+            self.df.loc[self.df.eval(q), f"{weightname}_up"] = self.df[weightname] + te
 
-            self.df.loc[self.df.eval(q), f"{syst_weight}_down"] = (
-                self.df["_".join([self.prefices, self.syst_weight])] - te
+            self.df.loc[self.df.eval(q), f"{weightname}_down"] = (
+                self.df[weightname] - te
             )
 
             self.df.loc[
                 self.df.eval(q),
-                [f"{prefix}_{syst_weight}_var_{j}" for j in range(self.Nvar)],
+                [f"{weightname}_var_{j}" for j in range(self.Nvar)],
             ] = self.variator.variations[:, i]
 
     def _combine_variations(self):
@@ -284,10 +305,10 @@ class Template(ABC):
                 # Now I'm replacing 0s with 1s to avoid NANs in the histogram
                 if isinstance(self.prefices, str):
                     # PATCH
-                    syst_weight = "_".join([self.prefices, self.syst_weight])
+                    weightname = "_".join([self.prefices, self.syst_weight])
                     weights = (
-                        self.df[self.total_weight] / self.df[syst_weight].replace(0, 1)
-                    ) * (self.df["_".join((syst_weight, index))])
+                        self.df[self.total_weight] / self.df[weightname].replace(0, 1)
+                    ) * (self.df["_".join((weightname, index))])
                 else:
                     raise NotImplementedError(
                         "Only one prefix at a time currently! Revisit this for HID and pi0s"
@@ -298,11 +319,23 @@ class Template(ABC):
         else:
             # Divide with the nominal systematic weight and multiply with the varied one
             if isinstance(self.prefices, str):
-                # PATCH
-                syst_weight = "_".join([self.prefices, self.syst_weight])
+                weightname = "_".join([self.prefices, self.syst_weight])
                 weights = np.array(
-                    (self.df[self.total_weight] / self.df[syst_weight].replace(0, 1))
-                    * self.df[f"{syst_weight}_var_{index}"]
+                    (self.df[self.total_weight] / self.df[weightname].replace(0, 1))
+                    * self.df[f"{weightname}_var_{index}"]
+                )
+            elif isinstance(self.prefices, list):
+                # If we have multiple prefices we need to to create all the column names first
+                weightnames = [
+                    "_".join([prefix, self.syst_weight]) for prefix in self.prefices
+                ]
+                # We divide with the product of all the nominal weights
+                # and multiply with the product of all of those which we added the suffix to
+                weights = np.array(
+                    (
+                        self.df[self.total_weight] / self.df[weightnames].replace(0, 1)
+                    ).prod(axis=1)
+                    * self.df[[f"{w}_var_{index}" for w in weightnames]].prod(axis=1)
                 )
 
             else:

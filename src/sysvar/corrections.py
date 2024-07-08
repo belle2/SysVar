@@ -122,12 +122,31 @@ class BaseCorrection(ABC):
             >>> obj._build_column_name(None, "variable")
             'variable'
         """
-        if prefix is None:
+        if not isinstance(variable, str):
+            raise ValueError(
+                f"{variable} is expected to be str by you passed {type(variable)}"
+            )
+        if not isinstance(prefix, str):
+            raise ValueError(
+                f"{prefix} is expected to be str by you passed {type(prefix)}"
+            )
+        elif prefix is None:
             column_name = variable
         else:
             column_name = "_".join([prefix, variable])
 
         return column_name
+
+    def add_extra_cuts(self, queries: str, prefix: str) -> str:
+        if self._get_extra_cut_info() is not None:
+            # Add the prefix to the extra cut info
+            for var, values in self._get_extra_cut_info().items():
+                extra_cut = self._build_column_name(prefix, f"{var} in {values}")
+                queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+
+            return queries
+        else:
+            return queries
 
     @staticmethod
     def _extend_queries_with_extra_cut(queries: list, extra_cut: str) -> list:
@@ -145,6 +164,9 @@ class BaseCorrection(ABC):
             ['query1 & extra_condition', 'query2 & extra_condition']
         """
         return [" & ".join([q, extra_cut]) for q in queries]
+
+    def _get_extra_cut_info(self):
+        return self.info["extra_cuts"]
 
     @property
     def N(self) -> int:
@@ -287,17 +309,14 @@ class Correction1D(BaseCorrection):
             for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
 
-    def build_queries(
-        self, prefix: str | None = None, extra_cut: str | None = None
-    ) -> list:
+    def build_queries(self, prefix: str | None = None) -> list:
 
         column_name = self._build_column_name(prefix, self.dependant_variable)
         queries = [
             f"{low} <= {column_name} < {up}"
             for low, up in zip(self.lower_bounds, self.upper_bounds)
         ]
-        if extra_cut is not None:
-            queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+        queries = self.add_extra_cuts(queries, prefix)
 
         return queries
 
@@ -349,9 +368,6 @@ class Correction2DCategorical(BaseCorrection):
             f"{self.categorical_variable} == {cv} & {low} <= {self.continuus_variable} < {up} & {self._get_extra_cut()}"
             for cv, (low, up) in self.iterator
         ]
-
-    def _get_extra_cut(self):
-        return self.info["extra_cut"]
 
 
 @dataclass
@@ -427,16 +443,13 @@ class CorrectionBF(BaseCorrection):
             unc_obj=sysvar_uncertainties[unc_type],
         )
 
-    def build_queries(
-        self, prefix: str | None = None, extra_cut: str | None = None
-    ) -> list:
+    def build_queries(self, prefix: str | None = None) -> list:
 
         column_name = self._build_column_name(prefix, self.dependant_variable)
         queries = [
             f"{column_name} == '{mode['dmID']}'" for mode in self.info["modes"].values()
         ]
-        if extra_cut is not None:
-            queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+        queries = self.add_extra_cuts(queries, prefix)
 
         return queries
 
@@ -553,9 +566,7 @@ class CorrectionPID(BaseCorrection):
             f"({row[1]['p_min']} <= {p_column_name} < {row[1]['p_max']} & {row[1]['theta_min']} <= {theta_column_name} < {row[1]['theta_max']} & {PDG_column_name} == {row[1]['mcPDG']} & {mcPDG_column_name} in {self._true_pdg})"
             for row in self.iterator
         ]
-
-        if extra_cut is not None:
-            queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+        queries = self.add_extra_cuts(queries, prefix)
 
         return queries
 
@@ -586,7 +597,9 @@ class CorrectionPID(BaseCorrection):
 # #######################################################################################
 def add_weights_to_dataframe(
     df: DataFrame,
-    correction: type(BaseCorrection),
+    systematic: str,
+    MC_production: str,
+    prefix: str,
     weightname: str,
     overwrite: bool = False,
 ):
@@ -604,27 +617,30 @@ def add_weights_to_dataframe(
 
     """
 
-    def _add_weights(df, correction, weightname):
+    def _add_weights(df, correction, prefix, column_name):
 
-        df.loc[:, weightname] = 1
-        for v, q in zip(correction.central_values, correction.queries):
+        df.loc[:, column_name] = 1
+        for v, q in zip(correction.central_values, correction.build_queries(prefix)):
             mask = df.eval(q)
-            df.loc[mask, weightname] = v
+            df.loc[mask, column_name] = v
 
-    if weightname in df.columns and overwrite:
-        logging.info("%s exists but it will be overwriten", weightname)
+    correction = create_correction_object(systematic, MC_production)
+    column_name = correction._build_column_name(prefix, weightname)
 
-        _add_weights(df, correction, weightname)
+    if column_name in df.columns and overwrite:
+        logging.info("%s exists but it will be overwriten", column_name)
 
-    elif weightname in df.columns and not overwrite:
+        _add_weights(df, correction, prefix, column_name)
+
+    elif column_name in df.columns and not overwrite:
 
         logging.warning(
             "%s exists but it not will be ovewritten. Skipping. No weights are added. If you want to change this behaviour set the overwrite argument to True",
-            weightname,
+            column_name,
         )
-    elif weightname not in df.columns:
-        logging.info("%s does not exist. Adding it to dataframe", weightname)
-        _add_weights(df, correction, weightname)
+    elif column_name not in df.columns:
+        logging.info("%s does not exist. Adding it to dataframe", column_name)
+        _add_weights(df, correction, prefix, column_name)
 
 
 def combine_weights(
@@ -643,6 +659,41 @@ def combine_weights(
     elif new_weight not in df.columns:
         logging.info("%s does not exist. Adding it to dataframe", new_weight)
         df.loc[:, new_weight] = df[weights].prod(axis=1)
+
+
+def create_correction_object(syst_effect: str, MC_prod: str) -> BaseCorrection:
+    """Retrieves amd creates the appropriate correction object based on the systematic effect and MC production type.
+
+    Args:
+        syst_effect (str): The systematic effect identifier.
+        MC_prod (str): The Monte Carlo production type identifier.
+
+    Returns:
+        BaseCorrection: The appropriate correction object based on the provided systematic effect and MC production type.
+
+    Raises:
+        NotImplementedError: If the correction type specified in the configuration is not implemented.
+
+    Example:
+        >>> correction = get_correction_object("syst1", "MC1")
+        >>> isinstance(correction, BaseCorrection)
+        True
+    """
+    correction_types = {
+        "1D": Correction1D,
+        "2DCategorical": Correction2DCategorical,
+        "BF": CorrectionBF,
+        "PID": CorrectionPID,
+    }
+
+    corr_type = read_yaml(syst_effect, MC_prod)["correction_type"]
+
+    try:
+        return correction_types[corr_type](syst_effect, MC_prod)
+    except KeyError:
+        raise NotImplementedError(
+            f"Available corrections are: {list(correction_types.keys())}"
+        )
 
 
 class CorrectionTableFinder:
