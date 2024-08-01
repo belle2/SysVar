@@ -322,6 +322,14 @@ class Template(ABC):
                     (self.df[self.total_weight] / self.df[weightname].replace(0, 1))
                     * self.df[f"{weightname}_var_{index}"]
                 )
+
+            elif self.prefices is None:
+                weightname = self.syst_weight
+                weights = np.array(
+                    (self.df[self.total_weight] / self.df[weightname].replace(0, 1))
+                    * self.df[f"{weightname}_var_{index}"]
+                )
+
             elif isinstance(self.prefices, list):
                 # If we have multiple prefices we need to to create all the column names first
                 weightnames = [
