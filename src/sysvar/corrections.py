@@ -126,7 +126,7 @@ class BaseCorrection(ABC):
             raise ValueError(
                 f"{variable} is expected to be str by you passed {type(variable)}"
             )
-        if not isinstance(prefix, str):
+        if not isinstance(prefix, str) and prefix is not None:
             raise ValueError(
                 f"{prefix} is expected to be str by you passed {type(prefix)}"
             )

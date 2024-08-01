@@ -156,7 +156,7 @@ class Template(ABC):
 
     def add_variations(self):
 
-        if isinstance(self.prefices, str):
+        if isinstance(self.prefices, str) or self.prefices is None:
             # If we are dealing with a single column, just build the name and add the variations
             weightname = self.correction._build_column_name(
                 self.prefices, self.syst_weight
@@ -175,8 +175,6 @@ class Template(ABC):
                 self._initialize_variations(weightname)
                 self._add_variations_to_df(weightname, prefix)
 
-        elif self.prefices is None:
-            raise ValueError("Prefices have not been defined. How do we treat this ? ")
         else:
             raise ValueError(
                 f"The prefices must be str or a list of str. You passed {type(self.prefices)}"
