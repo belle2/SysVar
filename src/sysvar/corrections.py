@@ -692,7 +692,7 @@ def create_correction_object(syst_effect: str, MC_prod: str) -> BaseCorrection:
         return correction_types[corr_type](syst_effect, MC_prod)
     except KeyError:
         raise NotImplementedError(
-            f"Available corrections are: {list(correction_types.keys())}"
+            f"Available corrections are: {list(correction_types.keys())} but you passed {corr_type}"
         )
 
 
