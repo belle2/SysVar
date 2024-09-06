@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 import uproot
 import logging
 import typing as t
@@ -19,9 +21,9 @@ logging.basicConfig(
 
 
 def save_existing_eigenvariations(
-        df: pd.DataFrame,
-        analysis: str,
-        systematic: str,
+    df: pd.DataFrame,
+    analysis: str,
+    systematic: str,
 ) -> None:
     settings = read_yaml("template_setup", analysis)
 
@@ -54,7 +56,9 @@ def save_existing_eigenvariations(
 
                 tmp_df = df.query(q)
                 if len(tmp_df) > 0:
-                    logging.info(f"Computing templates in region: {reco_channel_ids} for template: {template_name}")
+                    logging.info(
+                        f"Computing templates in region: {reco_channel_ids} for template: {template_name}"
+                    )
 
                     for variation in range(N_eigen):
                         hist_up = np.histogramdd(
@@ -71,13 +75,13 @@ def save_existing_eigenvariations(
                             np.array(tmp_df[[*binning.keys()]]),
                             bins=[bins for bins in binning.values()],
                             weights=tmp_df[total_weight]
-                                    / tmp_df[syst_weight]
-                                    * tmp_df[f"{syst_weight}_down{variation}"].fillna(1),
+                            / tmp_df[syst_weight]
+                            * tmp_df[f"{syst_weight}_down{variation}"].fillna(1),
                         )
 
-                        newfile[f"{reco_channel_name}/{template_name}/{systematic}_up{variation}"] = hist_up[
-                            0
-                        ].flatten(), np.linspace(
+                        newfile[
+                            f"{reco_channel_name}/{template_name}/{systematic}_up{variation}"
+                        ] = hist_up[0].flatten(), np.linspace(
                             0, 1, hist_up[0].flatten().shape[0] + 1
                         )
                         newfile[
@@ -87,5 +91,7 @@ def save_existing_eigenvariations(
                         )
 
                 else:
-                    logging.info(f"Skipping template in region: {reco_channel_ids} for template: {template_name}")
+                    logging.info(
+                        f"Skipping template in region: {reco_channel_ids} for template: {template_name}"
+                    )
                     continue
