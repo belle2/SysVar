@@ -619,7 +619,7 @@ def add_weights_to_dataframe(
 
     def _add_weights(df, correction, prefix, column_name):
 
-        df.loc[:, column_name] = 1
+        df.loc[:, column_name] = 1.0
         for v, q in zip(correction.central_values, correction.build_queries(prefix)):
             mask = df.eval(q)
             df.loc[mask, column_name] = v

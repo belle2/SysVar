@@ -165,7 +165,7 @@ class EigenDecomposer:
 
     @cached_property
     def combined_variations(self) -> np.ndarray:
-        return np.vstack([x._get_absolute_variations() for x in self.templates])
+        return np.vstack([x._get_absolute_variations() for x in tqdm(self.templates)])
 
     @property
     def cov(self) -> np.ndarray:
