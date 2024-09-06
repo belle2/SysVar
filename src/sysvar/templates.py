@@ -171,6 +171,7 @@ class Template(ABC):
                 weightname = self.correction._build_column_name(
                     prefix, self.syst_weight
                 )
+
                 # And initialize and add all the variations
                 self._initialize_variations(weightname)
                 self._add_variations_to_df(weightname, prefix)
@@ -195,7 +196,7 @@ class Template(ABC):
         # The index needs to be reseted, otherwise pandas will create extra rows
         # Here we overwrite the Templates dataframe
         # This is okay since this is only a copy of the original dataframe passed by the user.
-        self.df = concat([self.df.reset_index(), variations], axis=1)
+        self.df = concat([self.df.reset_index(drop=True), variations], axis=1)
 
     def _add_variations_to_df(self, weightname: str, prefix: None | str = None):
 
