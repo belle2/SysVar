@@ -8,6 +8,7 @@ import numpy as np
 
 from sysvar.corrections import BaseCorrection
 from sysvar.visualize import VariatorVisualizer
+from sysvar.utils import SavableAttributesObject
 
 
 class MissingSavingInfo(Exception):
@@ -15,7 +16,7 @@ class MissingSavingInfo(Exception):
 
 
 # TODO should this really be an ABC ? Need to think about it...
-class Variator(ABC):
+class Variator(ABC, SavableAttributesObject):
     """
     Abstract base class for generating variations on a correction.
     Then the variator will create a big covariance matrix of all the uncertainties.
@@ -40,33 +41,10 @@ class Variator(ABC):
            central_values (Iterable): The central values of the correction weights
 
         """
-
+        super().__init__()
         self.correction = correction
         self.Nvar = Nvar
         self.variations = self.get_correction_variations()
-
-        self._save_figures = False
-        self.visualizer = None
-        self.figure_save_info = {
-            "namespace": None,
-            "top_dir": None,
-            "dir_spec": None,
-            "extra_ext": None,
-            "save": None,
-        }
-
-    @property
-    def save_figures(self):
-        return self._save_figures
-
-    @save_figures.setter
-    def save_figures(self, value):
-
-        if not isinstance(value, bool):
-            raise TypeError(
-                "save_figures is strictly a boolean variable. Please pass True or False. save_figure defaults to False"
-            )
-        self._save_figures = value
 
     @property
     def cov_matrix(self) -> np.ndarray:
@@ -158,49 +136,19 @@ class Variator(ABC):
             Nvar, self.correction.uncertainties[name].cov_matrix
         )
 
-    def register_figure_saving_info(
-        self,
-        namespace: list = None,
-        top_dir: str = None,
-        dir_spec: str | None | bool = None,
-        extra_ext: str | Iterable | None = None,
+    def plot_cov_and_corr(self, save: bool = False, filename: str = ""):
+        visualizer = VariatorVisualizer(self)
+        visualizer.plot_cov_and_corr(save=save, filename=filename)
+
+    def plot_gaussian_variations(self, save: bool = False, filename: str = ""):
+        self._check_saving_status()
+        visualizer = VariatorVisualizer(self)
+        visualizer.plot_gaussian_variations(save=save, filename=filename)
+
+    def plot_relative_variations_in_grid(
+        self, nbins: int = 41, save: bool = False, filename: str = ""
     ):
 
-        self.figure_save_info = {
-            "namespace": namespace,
-            "top_dir": top_dir,
-            "dir_spec": dir_spec,
-            "extra_ext": extra_ext,
-            "save": self._save_figures,
-        }
-
-    @staticmethod
-    def explain_figure_saving_info():
-        raise NotImplementedError(
-            "Implement the method that explains what namespace, top_dir, dir_spec and extra_ext are doing"
-        )
-
-    def _check_saving_status(self):
-        if self._save_figures:
-            if all(x is None for x in list(self.figure_save_info.values())):
-                raise MissingSavingInfo(
-                    "You wish to save your figures by setting save_figures = True, but you have not specified the target saving info. SysVar will not save the figures at a random directory. Please call the register_figure_saving_info method to specify the necessary information before replotting. If you're are unsure what this info should be, call the explain_figure_saving_info method for a quick overview"
-                )
-            else:
-                pass
-
-    def plot_cov_and_corr(self):
         self._check_saving_status()
-        visualizer = VariatorVisualizer(self, **self.figure_save_info)
-        visualizer.plot_cov_and_corr()
-
-    def plot_gaussian_variations(self):
-        self._check_saving_status()
-        visualizer = VariatorVisualizer(self, **self.figure_save_info)
-        visualizer.plot_gaussian_variations()
-
-    def plot_relative_variations_in_grid(self, nbins: int = 41):
-
-        self._check_saving_status()
-        visualizer = VariatorVisualizer(self, **self.figure_save_info)
-        visualizer.plot_relative_variations_in_grid(nbins)
+        visualizer = VariatorVisualizer(self)
+        visualizer.plot_relative_variations_in_grid(nbins, save=save, filename=filename)

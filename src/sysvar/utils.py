@@ -5,6 +5,10 @@ from pathlib import Path
 from yaml import safe_load
 from typing import List
 import numpy as np
+
+from abc import ABC, abstractmethod
+
+
 import logging
 
 logging.basicConfig(
@@ -204,3 +208,29 @@ def get_varied_FF_central_values(model):
             eigenvalue_variations.append((up, down))
 
     return eigenvalue_variations
+
+
+class SavableAttributesObject:
+    """A class for managing objects with savable attributes.
+
+    This class provides a mechanism to register and store saving information for various attributes.
+
+    Attributes:
+        saving_info (dict): A dictionary to store saving-related information.
+    """
+
+    def __init__(self):
+        """Initializes the SavableAttributesObject with an empty `saving_info` dictionary."""
+        self.saving_info = {}
+
+    def register_saving_info(self, saving_info: dict):
+        """Registers the saving information for the object's attributes.
+
+        Args:
+            saving_info (dict): A dictionary containing information about how attributes should be saved.
+
+        Example:
+            >>> obj = SavableAttributesObject()
+            >>> obj.register_saving_info({'attribute_name': 'save_path'})
+        """
+        self.saving_info = saving_info

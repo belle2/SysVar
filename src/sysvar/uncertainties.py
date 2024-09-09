@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Iterable, List
 
+from sysvar.utils import SavableAttributesObject
+
 import numpy as np
 
 
@@ -24,7 +26,7 @@ class MultiDimArrayError(Exception):
     pass
 
 
-class Uncertainty(ABC):
+class Uncertainty(ABC, SavableAttributesObject):
     """
     Abstract base class for representing uncertainties with a name and error values.
 
