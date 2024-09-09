@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from sysvar.templates import Template
     from sysvar.eigendecomposer import EigenDecomposer
 
-from datetime import datetime
 from os import path, makedirs
 import math
 
@@ -26,29 +25,16 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.colors import LogNorm
 
+from sysvar.saver import PlotSaver
+
 
 PALETTE = sns.color_palette("colorblind")
 CMAP = "Blues"
 
 
 class Visualizer(ABC):
-    def __init__(
-        self,
-        instance: BaseCorrection,
-        namespace: list = None,
-        top_dir: str = None,
-        dir_spec: str | None | bool = None,
-        extra_ext: str | Iterable | None = None,
-        save: bool = False,
-    ):
-
+    def __init__(self, instance: BaseCorrection):
         self.instance = instance
-        self.namespace = namespace
-        self.top_dir = top_dir
-        # Get the save dir. By default this is today's date
-        self.save_dir = self._get_save_dir(top_dir, dir_spec)
-        self.extensions = self._get_extensions(extra_ext)
-        self.save = save
         super().__init__()
 
     def create_single_figure(self):
@@ -61,6 +47,9 @@ class Visualizer(ABC):
             "Implement a method that will tell you what kind of plots are available"
         )
 
+    def save_figure(self, figure, filename: str):
+        plot_saver = PlotSaver(figure, filename, self.instance.saving_info)()
+
     @abstractmethod
     def plot_cov_matrix(self):
         pass
@@ -69,7 +58,7 @@ class Visualizer(ABC):
     def plot_corr_matrix(self):
         pass
 
-    def plot_cov_and_corr(self):
+    def plot_cov_and_corr(self, save: bool = False, filename: str = ""):
 
         fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=800, sharey=True)
 
@@ -78,81 +67,15 @@ class Visualizer(ABC):
 
         self.annotate_matrix_plot(fig, ax)
 
-        if self.save:
-            self.save_figure(fig, ["cov_and_corr"])
+        if save:
+            self.instance.saving_info["namespace"] = ["cov_and_corr"]
+            self.save_figure(fig, filename)
 
         return fig, ax
 
     @abstractmethod
     def annotate_matrix_plot(self):
         pass
-
-    def save_figure(
-        self,
-        fig: Figure,
-        fig_name_comps: list,
-    ):
-        """Helper function to save figure when it is called.
-        The figure needs to be passed as a argument.
-        The name of the figure is combined by default with png and pdf extensions and then saved
-
-        Args:
-        fig: plt figure to save
-        fig_name_comps: components to combine into a single figure name
-
-        """
-        # First check if the dir exists already
-        self.check_if_dir_exists()
-
-        # build the name of the figure
-        name = "_".join((self.namespace + fig_name_comps))
-
-        # Loop over the extensions, create the figname and then save the figure
-        for ext in self.extensions:
-
-            # Check if ext alread has dot in the beginning. If not add it
-            if ext[0] != ".":
-                ext.insert(0, ".")
-
-            figname = name + ext
-            fig.savefig(path.join(self.save_dir, figname), bbox_inches="tight", dpi=800)
-        print(f"Saved figures in {self.save_dir}")
-
-    def check_if_dir_exists(self):
-
-        if path.exists(self.save_dir):
-            pass
-        else:
-            makedirs(self.save_dir)
-
-    @staticmethod
-    def _get_extensions(extra_ext):
-
-        # Define the defaule extensions
-        extensions = [".pdf", ".png"]
-        if extra_ext is not None:
-
-            if isinstance(extra_ext, str):
-                extensions.append(extra_ext)
-            elif isinstance(extra_ext, list):
-                extensions.extend(extra_ext)
-            else:
-                raise TypeError(f"Unkown type {type(extra_ext)} for extra_ext")
-
-        return extensions
-
-    @staticmethod
-    def _get_save_dir(top_dir, dir_spec):
-
-        if dir_spec:
-            today = datetime.today().strftime("%Y-%m-%d")
-            dir_name = today if dir_spec is None else "-".join((today, dir_spec))
-
-            outdir = path.join(top_dir, dir_name)
-        else:
-            outdir = top_dir
-
-        return outdir
 
     @staticmethod
     def plot_variation_on_axis(
@@ -161,6 +84,8 @@ class Visualizer(ABC):
         variation: np.ndarray,
         index: None | int = None,
         plot_func: str = "step",
+        save: bool = False,
+        filename: str = "",
     ):
         """
         Plots a variation on a given axis.
@@ -206,16 +131,8 @@ class NoMatrixError(Exception):
 
 
 class CorrectionVisualizer(Visualizer):
-    def __init__(
-        self,
-        instance: BaseCorrection,
-        namespace: list,
-        top_dir: str,
-        dir_spec: str | None = None,
-        extra_ext: str | Iterable | None = None,
-        save: bool = False,
-    ):
-        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+    def __init__(self, instance: BaseCorrection):
+        super().__init__(instance)
 
     def annotate_matrix_plot(self, ax: Axes):
         raise NoMatrixError(
@@ -232,7 +149,7 @@ class CorrectionVisualizer(Visualizer):
             "The Correction object does not have a covariance nor a correlation matrix. This is normal! Don't try to call this method on this class"
         )
 
-    def plot_error_comparison(self):
+    def plot_error_comparison(self, save: bool = False, filename: str = ""):
 
         fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
 
@@ -266,23 +183,16 @@ class CorrectionVisualizer(Visualizer):
         ax.set_title(f"{self.instance.title} uncertainties")
         plt.legend(bbox_to_anchor=(1, 0.7))
 
-        if self.save:
-            self.save_figure(fig, ["error_comparison"])
+        if save:
+            self.instance.saving_info["namespace"] = ["error_comparison"]
+            self.save_figure(fig, filename)
 
         return fig, ax
 
 
 class UncertaintyVisualizer(Visualizer):
-    def __init__(
-        self,
-        instance: Uncertainty,
-        namespace: list,
-        top_dir: str,
-        dir_spec: str | None = None,
-        extra_ext: str | Iterable | None = None,
-        save: bool = False,
-    ):
-        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+    def __init__(self, instance: Uncertainty):
+        super().__init__(instance)
 
     def annotate_matrix_plot(self, fig: Figure, ax: Axes):
 
@@ -310,7 +220,9 @@ class UncertaintyVisualizer(Visualizer):
             rotation=0,
         )
 
-    def plot_cov_matrix(self, ax: Axes | None = None):
+    def plot_cov_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -324,9 +236,15 @@ class UncertaintyVisualizer(Visualizer):
         )
         ax.set_title("Covariance matrix")
 
+        if save:
+            self.instance.saving_info["namespace"] = ["cov"]
+            self.save_figure(fig, filename)
+
         return ax
 
-    def plot_corr_matrix(self, ax: Axes | None = None):
+    def plot_corr_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -342,20 +260,16 @@ class UncertaintyVisualizer(Visualizer):
         )
         ax.set_title("Correlation matrix")
 
+        if save:
+            self.instance.saving_info["namespace"] = ["corr"]
+            self.save_figure(fig, filename)
+
         return ax
 
 
 class VariatorVisualizer(Visualizer):
-    def __init__(
-        self,
-        instance: Variator,
-        namespace: list,
-        top_dir: str,
-        dir_spec: str | None = None,
-        extra_ext: str | Iterable | None = None,
-        save: bool = False,
-    ):
-        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+    def __init__(self, instance: Variator):
+        super().__init__(instance)
         self._strings = self.instance.correction.visual_labels
 
     @property
@@ -397,7 +311,9 @@ class VariatorVisualizer(Visualizer):
             rotation=(0 if isinstance(self.instance.correction, CorrectionBF) else 0),
         )
 
-    def plot_cov_matrix(self, ax: Axes | None = None):
+    def plot_cov_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -413,7 +329,9 @@ class VariatorVisualizer(Visualizer):
 
         return ax
 
-    def plot_corr_matrix(self, ax: Axes | None = None):
+    def plot_corr_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -431,7 +349,7 @@ class VariatorVisualizer(Visualizer):
 
         return ax
 
-    def plot_gaussian_variations(self):
+    def plot_gaussian_variations(self, save: bool = False, filename: str = ""):
         """
         Plot Gaussian variations of the corrections.
 
@@ -460,12 +378,19 @@ class VariatorVisualizer(Visualizer):
 
         fig.suptitle(f"{self.instance.Nvar} variations", fontsize=18)
 
-        if self.save:
-            self.save_figure(fig, ["gaussian_variations"])
+        if save:
+            self.instance.saving_info["namespace"] = ["gaussian", "variations"]
+            self.save_figure(fig, filename)
 
         return fig, ax
 
-    def plot_relative_variations(self, value_edges: Iterable, Nvar: int = 5):
+    def plot_relative_variations(
+        self,
+        value_edges: Iterable,
+        Nvar: int = 5,
+        save: bool = False,
+        filename: str = "",
+    ):
         """
         Plots the relative variations of the templates.
         The Nvar argument specifies the number of variatios that will be plotted.
@@ -491,12 +416,15 @@ class VariatorVisualizer(Visualizer):
                 plot_func="stairs",
             )
 
-        if self.save:
-            self.save_figure(fig, ["relative_variations"])
+        if save:
+            self.instance.saving_info["namespace"] = ["relative", "variations"]
+            self.save_figure(fig, filename)
 
         return fig, ax
 
-    def plot_relative_variations_in_grid(self, nbins: int = 41):
+    def plot_relative_variations_in_grid(
+        self, nbins: int = 41, save: bool = False, filename: str = ""
+    ):
 
         counts = []
         bin_edges = []
@@ -527,23 +455,16 @@ class VariatorVisualizer(Visualizer):
 
         ax.invert_yaxis()
 
-        if self.save:
-            self.save_figure(fig, ["relative_variations_in_grid"])
+        if save:
+            self.instance.saving_info["namespace"] = ["relative", "variations", "grid"]
+            self.save_figure(fig, filename)
 
         return fig, ax
 
 
 class TemplateVisualizer(Visualizer):
-    def __init__(
-        self,
-        instance: Template,
-        namespace: list,
-        top_dir: str,
-        dir_spec: str | None = None,
-        extra_ext: str | Iterable | None = None,
-        save: bool = False,
-    ):
-        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+    def __init__(self, instance: Template):
+        super().__init__(instance)
 
     def annotate_matrix_plot(self, ax: Axes):
 
@@ -558,7 +479,9 @@ class TemplateVisualizer(Visualizer):
         ax.set_xlabel("Bins")
         ax.set_ylabel("Bins")
 
-    def plot_relative_variations_in_grid(self, ax, nbins: int = 11):
+    def plot_relative_variations_in_grid(
+        self, ax, nbins: int = 11, save: bool = False, filename: str = ""
+    ):
 
         counts = []
         bin_edges = []
@@ -596,12 +519,20 @@ class TemplateVisualizer(Visualizer):
 
         ax.invert_yaxis()
 
-        if self.save:
-            self.save_figure(fig, ["template_relative_variations_in_grid"])
+        if save:
+            self.instance.saving_info["namespace"] = [
+                "template",
+                "relative",
+                "variations",
+                "grid",
+            ]
+            self.save_figure(fig, filename)
 
         return ax
 
-    def plot_cov_matrix(self, ax: Axes | None = None):
+    def plot_cov_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -621,7 +552,9 @@ class TemplateVisualizer(Visualizer):
 
         return ax
 
-    def plot_corr_matrix(self, ax: Axes | None = None):
+    def plot_corr_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -640,7 +573,9 @@ class TemplateVisualizer(Visualizer):
 
         return ax
 
-    def plot_nominal_template(self, ax: Axes | None = None):
+    def plot_nominal_template(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -655,16 +590,17 @@ class TemplateVisualizer(Visualizer):
         ax.set_ylabel("Events / bin")
         ax.set_xlabel("Fitting variable")
 
-        if self.save:
+        if save:
             try:
-                self.save_figure(fig, ["nominal_template"])
+                self.instance.saving_info["namespace"] = [f"nominal", "template"]
+                self.save_figure(fig, filename)
             except UnboundLocalError:
                 # Don't save the plot if this is a part of a bigger plot
                 pass
 
         return ax
 
-    def plot_variations(self, Nvar: int = 5):
+    def plot_variations(self, Nvar: int = 5, save: bool = False, filename: str = ""):
 
         fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
 
@@ -683,12 +619,15 @@ class TemplateVisualizer(Visualizer):
         ax.set_xlabel("Fitting variable")
         ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 
-        if self.save:
-            self.save_figure(fig, [f"{str(Nvar)} variations"])
+        if save:
+            self.instance.saving_info["namespace"] = [f"{str(Nvar)}", "variations"]
+            self.save_figure(fig, filename)
 
         return fig, ax
 
-    def plot_up_and_down_variations(self, ax: np.ndarray | None = None):
+    def plot_up_and_down_variations(
+        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -749,14 +688,17 @@ class TemplateVisualizer(Visualizer):
         ax[1].set_ylim(0.01, 1)
         ax[1].set_yscale("log")
 
-        if self.save:
+        if save:
             try:
-                self.save_figure(fig, [f"up_and_down_variations"])
+                self.instance.saving_info["namespace"] = [f"up", "down", "variations"]
+                self.save_figure(fig, filename)
             except UnboundLocalError:
                 # Don't save the plot if this is a part of a bigger plot
                 pass
 
-    def plot_eigenvalues(self, ax: np.ndarray | None = None):
+    def plot_eigenvalues(
+        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -792,7 +734,7 @@ class TemplateVisualizer(Visualizer):
                 ticklabel.set_color("grey")
                 ticklabel.set_fontsize(7)
 
-    def plot_systematic_overview(self):
+    def plot_systematic_overview(self, save: bool = False, filename: str = ""):
 
         # gridspec inside gridspec
         fig = plt.figure(figsize=(16, 10), dpi=800)
@@ -817,8 +759,9 @@ class TemplateVisualizer(Visualizer):
         ax3 = fig.add_subplot(gs_low[1, 0])
         self.plot_up_and_down_variations(np.array([ax2, ax3]))
 
-        if self.save:
-            self.save_figure(fig, ["systematic_overview"])
+        if save:
+            self.instance.saving_info["namespace"] = ["systematics", "overview"]
+            self.save_figure(fig, filename)
 
         return fig, (ax0, ax01, ax1, ax2, ax3)
 
@@ -833,7 +776,7 @@ class FFModelVisualizer(Visualizer):
         extra_ext: str | Iterable | None = None,
         save: bool = False,
     ):
-        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+        super().__init__(instance)
 
     def annotate_matrix_plot(self, ax: Axes):
 
@@ -954,16 +897,8 @@ class FFModelVisualizer(Visualizer):
 
 
 class EigenDecomposerVisualizer(Visualizer):
-    def __init__(
-        self,
-        instance: EigenDecomposer,
-        namespace: list,
-        top_dir: str,
-        dir_spec: str | None = None,
-        extra_ext: str | Iterable | None = None,
-        save: bool = False,
-    ):
-        super().__init__(instance, namespace, top_dir, dir_spec, extra_ext, save)
+    def __init__(self, instance: EigenDecomposer):
+        super().__init__(instance)
 
     def plot_cov_matrix(self):
         pass
@@ -981,7 +916,9 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.set_xlabel("Templates/Bins")
         ax.set_ylabel("Templates/Bins")
 
-    def plot_corr_matrix(self, ax: Axes | None = None):
+    def plot_corr_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -996,9 +933,15 @@ class EigenDecomposerVisualizer(Visualizer):
         )
         ax.set_title("Correlation matrix")
 
+        if save:
+            self.instance.saving_info["namespace"] = ["egd", "corr", "matrix"]
+            self.save_figure(fig, filename)
+
         return ax
 
-    def plot_eigenvalues(self, ax: np.ndarray | None = None):
+    def plot_eigenvalues(
+        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -1039,7 +982,9 @@ class EigenDecomposerVisualizer(Visualizer):
         ax_right.set_yscale("log")
         ax_right.set_ylabel(r"max($\frac{|Cov - Cov^{'}|}{Cov}$)", color="#07529aff")
 
-    def plot_cov_diff(self, ax: np.ndarray | None = None):
+    def plot_cov_diff(
+        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
@@ -1069,6 +1014,9 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.fill_between(
             [-10, x[-1]], self.instance.precision, 1, alpha=0.5, color="#07529aff"
         )
+        if save:
+            self.instance.saving_info["namespace"] = ["egd", "cov", "diff"]
+            self.save_figure(fig, filename)
 
 
 def get_latex_symbol(key):

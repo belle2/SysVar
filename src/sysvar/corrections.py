@@ -19,7 +19,7 @@ from .uncertainties import (
     UncorrelatedUncertainty,
     get_uncertainty_types,
 )
-from sysvar.utils import read_yaml
+from sysvar.utils import read_yaml, SavableAttributesObject
 from sysvar.visualize import CorrectionVisualizer, UncertaintyVisualizer
 
 import logging
@@ -46,18 +46,15 @@ class NotValidRateType(Exception):
     pass
 
 
-class MissingSavingInfo(Exception):
-    pass
-
-
 @dataclass()
-class BaseCorrection(ABC):
+class BaseCorrection(ABC, SavableAttributesObject):
     systematic: str = None
     MC_production: str = None
     uncertainties: dict = field(default_factory=dict)
 
     def __post_init__(self):
 
+        super().__init__()
         try:
             self.info = read_yaml(self.systematic, self.MC_production)
         except TypeError:
@@ -65,29 +62,8 @@ class BaseCorrection(ABC):
                 "Need to specify the systematic effect and the MC production in the positional arguments"
             )
 
-        self._save_figures = False
         self.visualizer = None
-        self.figure_save_info = {
-            "namespace": None,
-            "top_dir": None,
-            "dir_spec": None,
-            "extra_ext": None,
-            "save": None,
-        }
         self.title = self.info["title"]
-
-    @property
-    def save_figures(self):
-        return self._save_figures
-
-    @save_figures.setter
-    def save_figures(self, value):
-
-        if not isinstance(value, bool):
-            raise TypeError(
-                "save_figures is strictly a boolean variable. Please pass True or False. save_figure defaults to False"
-            )
-        self._save_figures = value
 
     @property
     @abstractmethod
@@ -221,56 +197,21 @@ class BaseCorrection(ABC):
                         unc_obj=sysvar_uncertainties[unc_ctgy],
                     )
 
-    def register_figure_saving_info(
-        self,
-        namespace: list = None,
-        top_dir: str = None,
-        dir_spec: str | None | bool = None,
-        extra_ext: str | Iterable | None = None,
+    def plot_error_comparison(self, save: bool = False, filename: str = ""):
+
+        self.visualizer = CorrectionVisualizer(self)
+        self.visualizer.plot_error_comparison(save=save, filename=filename)
+
+    def plot_uncertainty(
+        self, unc_name: str | None = None, save: bool = False, filename: str = ""
     ):
-
-        self.figure_save_info = {
-            "namespace": namespace,
-            "top_dir": top_dir,
-            "dir_spec": dir_spec,
-            "extra_ext": extra_ext,
-            "save": self._save_figures,
-        }
-
-    @staticmethod
-    def explain_figure_saving_info():
-        raise NotImplementedError(
-            "Implement the method that explains what namespace, top_dir, dir_spec and extra_ext are doing"
-        )
-
-    def _check_saving_status(self):
-        if self._save_figures:
-            if all(x is None for x in list(self.figure_save_info.values())):
-                raise MissingSavingInfo(
-                    "You wish to save your figures by setting save_figures = True, but you have not specified the target saving info. SysVar will not save the figures at a random directory. Please call the register_figure_saving_info method to specify the necessary information before replotting. If you're are unsure what this info should be, call the explain_figure_saving_info method for a quick overview"
-                )
-            else:
-                pass
-
-    def plot_error_comparison(self):
-
-        self._check_saving_status()
-        self.visualizer = CorrectionVisualizer(self, **self.figure_save_info)
-        self.visualizer.plot_error_comparison()
-
-    def plot_uncertainty(self, unc_name: str | None = None):
-        self._check_saving_status()
         if unc_name is None:
             for unc_obj in self.uncertainties.values():
-                self.visualizer = UncertaintyVisualizer(
-                    unc_obj, **self.figure_save_info
-                )
-                self.visualizer.plot_cov_and_corr()
+                self.visualizer = UncertaintyVisualizer(unc_obj)
+                self.visualizer.plot_cov_and_corr(save=save, filename=filename)
         else:
-            self.visualizer = UncertaintyVisualizer(
-                self.uncertainties[unc_name], **self.figure_save_info
-            )
-            self.visualizer.plot_cov_and_corr()
+            self.visualizer = UncertaintyVisualizer(self.uncertainties[unc_name])
+            self.visualizer.plot_cov_and_corr(save=save, filename=filename)
 
 
 @dataclass
