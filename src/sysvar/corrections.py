@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import cached_property
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Iterable, Optional
@@ -498,15 +500,40 @@ class CorrectionPID(BaseCorrection):
         self, prefix: str | None = None, extra_cut: str | None = None
     ) -> List[str]:
 
+        # Pre-compute column names to avoid repeated function calls
         p_column_name = self._build_column_name(prefix, self.p)
         theta_column_name = self._build_column_name(prefix, self.theta)
         PDG_column_name = self._build_column_name(prefix, self.PDG)
         mcPDG_column_name = self._build_column_name(prefix, self.mcPDG)
 
-        queries = [
-            f"({row[1]['p_min']} <= {p_column_name} < {row[1]['p_max']} & {row[1]['theta_min']} <= {theta_column_name} < {row[1]['theta_max']} & {PDG_column_name} == {row[1]['mcPDG']} & {mcPDG_column_name} in {self._true_pdg})"
-            for row in self.iterator
-        ]
+        # Create a local reference for self._true_pdg to avoid repeated attribute access
+        true_pdg = self._true_pdg
+
+        # Use a list comprehension with cached lookups to improve performance
+        queries = []
+        append_query = queries.append  # Local function assignment for faster append
+
+        # Use local variable access within the loop to speed up string formatting
+        for _, row in self.iterator:
+            # Access row[1] once and cache its values in local variables
+            p_min = row["p_min"]
+            p_max = row["p_max"]
+            theta_min = row["theta_min"]
+            theta_max = row["theta_max"]
+            mcPDG = row["mcPDG"]
+
+            # Construct the query string with reduced overhead
+            query = (
+                f"({p_min} <= {p_column_name} < {p_max} & "
+                f"{theta_min} <= {theta_column_name} < {theta_max} & "
+                f"{PDG_column_name} == {mcPDG} & "
+                f"{mcPDG_column_name} in {true_pdg})"
+            )
+
+            # Append the constructed query string to the list
+            append_query(query)
+
+        # Add any extra cuts to the queries if needed
         queries = self.add_extra_cuts(queries, prefix)
 
         return queries

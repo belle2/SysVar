@@ -216,9 +216,19 @@ class EigenDecomposer(SavableAttributesObject):
                     "########## Reco channel: %s ##########", str(reco_mode[1])
                 )
 
-            tmp_df = self.df.query(
-                f"{self.settings['reco_channel_id_column']} in @reco_mode[0] & {self.settings['template_id_column']} == '{template_name}'"
-            )
+            # Extract column names from settings for readability
+            reco_col = self.settings["reco_channel_id_column"]
+            template_col = self.settings["template_id_column"]
+
+            # Apply the filter using .loc for better performance
+            tmp_df = self.df.loc[
+                (self.df[reco_col].isin(reco_mode[0]))
+                & (self.df[template_col] == template_name)
+            ]
+
+            # tmp_df = self.df.query(
+            #    f"{self.settings['reco_channel_id_column']} in @reco_mode[0] & {self.settings['template_id_column']} == '{template_name}'"
+            # )
             # Skip template create if the query yields an empty dataframe
             if len(tmp_df) < 1:
                 logging.warn("Skipping template %s", str(template_name))
