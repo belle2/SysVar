@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from line_profiler import profile
+
 from functools import cached_property
 
 from abc import ABC, abstractmethod
@@ -177,29 +179,25 @@ class Template(ABC, SavableAttributesObject):
         # This is okay since this is only a copy of the original dataframe passed by the user.
         self.df = concat([self.df.reset_index(drop=True), variations], axis=1)
 
+    @profile
     def _add_variations_to_df(self, weightname: str, prefix: None | str = None):
 
-        # TODO where is the extra_cut read from?
+        # Build the queries based on the prefix
         queries = self.correction.build_queries(prefix)
 
-        for i, (q, te) in enumerate(zip(queries, self.correction.total_error)):
-            # Now add the variations of the corrections to the dataframe entries that
-            # pass the cuts
+        # Create a list to store the mask results for each query
+        masks = [self.df.query(q).index for q in queries]
 
-            # Commenting out, I think I don't need this at all
-            # This could only be useful for the FF stuff but there we don't
-            # calculate eigenvariations ourselves
-            #
-            self.df.loc[self.df.eval(q), f"{weightname}_up"] = self.df[weightname] + te
+        # Update DataFrame using precomputed masks
+        for i, (mask, te) in enumerate(zip(masks, self.correction.total_error)):
 
-            self.df.loc[self.df.eval(q), f"{weightname}_down"] = (
-                self.df[weightname] - te
-            )
+            # Perform vectorized updates with the precomputed mask
+            self.df.loc[mask, f"{weightname}_up"] = self.df.loc[mask, weightname] + te
+            self.df.loc[mask, f"{weightname}_down"] = self.df.loc[mask, weightname] - te
 
-            self.df.loc[
-                self.df.eval(q),
-                [f"{weightname}_var_{j}" for j in range(self.Nvar)],
-            ] = self.variator.variations[:, i]
+            # Assign variations in a vectorized way using column names
+            variation_columns = [f"{weightname}_var_{j}" for j in range(self.Nvar)]
+            self.df.loc[mask, variation_columns] = self.variator.variations[:, i]
 
     def _combine_variations(self):
 
@@ -318,9 +316,8 @@ class Template(ABC, SavableAttributesObject):
                 # We divide with the product of all the nominal weights
                 # and multiply with the product of all of those which we added the suffix to
                 weights = np.array(
-                    (
-                        self.df[self.total_weight] / self.df[weightnames].replace(0, 1)
-                    ).prod(axis=1)
+                    self.df[self.total_weight]
+                    / self.df[weightnames].replace(0, 1).prod(axis=1)
                     * self.df[[f"{w}_var_{index}" for w in weightnames]].prod(axis=1)
                 )
 
