@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from line_profiler import profile
-
 from functools import cached_property
 
 from abc import ABC, abstractmethod
@@ -179,7 +177,6 @@ class Template(ABC, SavableAttributesObject):
         # This is okay since this is only a copy of the original dataframe passed by the user.
         self.df = concat([self.df.reset_index(drop=True), variations], axis=1)
 
-    @profile
     def _add_variations_to_df(self, weightname: str, prefix: None | str = None):
 
         # Build the queries based on the prefix
