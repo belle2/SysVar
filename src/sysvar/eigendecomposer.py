@@ -406,13 +406,13 @@ class EigenDecomposer(SavableAttributesObject):
     def _get_TBranch_name(*args):
         return "/".join(args)
 
-    def save_nominal_templates(self):
+    def save_nominal_templates(self, filepath=None):
 
         # FIX there needs to be a check here to not recreate the file if it already exists or has nominal templates.
         # Now the user needs to be careful to not mess up the file and lose previously written nominals
-        with uproot.recreate(
-            self.settings["output_filepath"], compression=None
-        ) as newfile:
+        # Override the global filepath in case we want to run on a batch with b2luigi
+        filepath = self.settings["output_filepath"] if filepath is None else filepath
+        with uproot.recreate(filepath, compression=None) as newfile:
             logging.info(
                 "Recreate file with uproot: %s", self.settings["output_filepath"]
             )
@@ -437,9 +437,11 @@ class EigenDecomposer(SavableAttributesObject):
                     )
                 previous_tree = tree
 
-    def save_template_variations(self):
+    def save_template_variations(self, filepath=None):
 
-        with uproot.update(self.settings["output_filepath"]) as newfile:
+        # Override the global filepath in case we want to run on a batch with b2luigi
+        filepath = self.settings["output_filepath"] if filepath is None else filepath
+        with uproot.update(filepath) as newfile:
             logging.info(
                 "Updating file with uproot: %s", self.settings["output_filepath"]
             )
