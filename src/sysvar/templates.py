@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from pandas import DataFrame, concat
 
-from sysvar.corrections import BaseCorrection, Correction2DCategorical, CorrectionPID
+from sysvar.corrections import *
 from sysvar.variations import Variator
 from sysvar.visualize import TemplateVisualizer
 from sysvar.utils import SavableAttributesObject
@@ -48,10 +48,10 @@ class Template(ABC, SavableAttributesObject):
         self.prefices = prefices
 
         # Here the deep copy ensures that we're not affecting the original dataframe
-        self.df = df.copy(deep=True)
+        self.correction = correction
+        self.df = df[self._collect_columns_names()].copy(deep=True)
         # TODO Make a deep copy only of the columns that are needed
         # But for large dataframes we don't need to copy all these GB. only a handful of columns are necessary.
-        self.correction = correction
         self.variator = variator
         self.Nvar = variator.Nvar if variator is not None else variator
 
@@ -132,6 +132,67 @@ class Template(ABC, SavableAttributesObject):
     @abstractmethod
     def make_hist(self, index: None | int = None) -> np.ndarray:
         pass
+
+    def _collect_columns_names(self):
+        """
+        Collects and returns a list of column names based on the configuration of the object.
+
+        The method generates column names by combining a fixed set of base columns
+        (such as "channel" and "fit_ctgy") with dynamic elements like binning keys,
+        system weights, and variables specific to the type of correction applied to
+        the data. The correction could be of type `Correction1D`, `CorrectionBF`, or `CorrectionPID`,
+        and each type defines a different set of variables. Column names are prefixed
+        with one or more `prefices` defined for the object.
+
+        Returns:
+            list: A list of strings representing the collected column names.
+
+        Raises:
+            TypeError: If the type of `self.correction` is not recognized.
+
+        Notes:
+            - If `self.prefices` is not a list, it will be converted into one.
+            - For each prefix in `self.prefices`, a column name is generated for each
+              variable in the correction, using the method `_build_column_name`.
+            - The method constructs column names by appending variables to a set of
+              base columns such as channel, fit_ctgy, and binning keys.
+        """
+
+        # Initialize the base columns.
+        # TODO the channel and fit_ctgy should not be hardcoded here
+        columns = ["channel", "fit_ctgy", self.total_weight, *list(self.binning.keys())]
+
+        # Collect the prefices
+        prefices = (
+            [x for x in self.prefices]
+            if isinstance(self.prefices, list)
+            else [self.prefices]
+        )
+
+        # Collect the important variables based on the type of correction
+        if isinstance(self.correction, Correction1D):
+            variables = [
+                self.syst_weight,
+                self.correction.dependant_variable,
+                *list(self.correction.info["extra_cuts"].keys()),
+            ]
+        elif isinstance(self.correction, CorrectionBF):
+            variables = [self.syst_weight, self.correction.dependant_variable]
+        elif isinstance(self.correction, CorrectionPID):
+            variables = [
+                self.syst_weight,
+                self.correction.p,
+                self.correction.theta,
+                self.correction.PDG,
+                self.correction.mcPDG,
+            ]
+
+        # Construct the column names
+        for prefix in prefices:
+            for var in variables:
+                columns.append(self.correction._build_column_name(prefix, var))
+
+        return columns
 
     def add_variations(self):
 
