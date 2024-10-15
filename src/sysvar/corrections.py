@@ -265,6 +265,126 @@ class Correction1D(BaseCorrection):
 
 
 @dataclass
+class Correction2D(BaseCorrection):
+
+    uncertainties: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+
+        super().__post_init__()
+
+        self.dependant_variable_1 = self.info["dependant_variable_1"]
+        self.dependant_variable_2 = self.info["dependant_variable_2"]
+        self.unit_1 = self.info["unit_1"]
+        self.unit_2 = self.info["unit_2"]
+
+        self.central_values = self._extract_central_values()
+        self.populate_uncertainties()
+
+    # Add an iterator to ensure that we'll loop over the corrections and bins
+    # consistently
+    @property
+    def iterator(self):
+        rows, columns, momenta, angles = [], [], [], []
+
+        for i, column_name in enumerate(self.central_values_table.columns):
+            for j, row_name in enumerate(self.central_values_table.index):
+                # clean the pi0 tables.... What a format...
+                if i == 0:
+                    column_name = column_name.replace("  row:p column:t    ", "")
+                # strip the strings and extract the momentum range
+                column_name = column_name.replace("p=", "")
+                ps = [float(x) / 10 for x in column_name.split("_")]
+
+                # strip the strings and extract the theta range
+                row_name = row_name.replace("cost=", "")
+                ts = [float(x) for x in row_name.split("_")]
+
+                rows.append(j)
+                columns.append(i)
+                momenta.append(ps)
+                angles.append(ts)
+
+        # Return a generator. Now can access all the central values and
+        # errors using iloc and the rows/colums
+        return zip(rows, columns, momenta, angles)
+
+    @cached_property
+    def central_values_table(self) -> DataFrame:
+        table_path = self.build_table_path("nom")
+        return read_csv(table_path)
+
+    @cached_property
+    def stat_error_table(self) -> DataFrame:
+        table_path = self.build_table_path("stat")
+        # Add column names when reading to skip creation of index column
+        return read_csv(table_path, names=[f"p bin {i}" for i in range(8)])
+
+    @cached_property
+    def sys_error_table(self) -> DataFrame:
+        table_path = self.build_table_path("sys")
+        # Add column names when reading to skip creation of index column
+        return read_csv(table_path, names=[f"p bin {i}" for i in range(8)])
+
+    def build_table_path(self, suffix: str) -> str:
+
+        table_dir = self.info["table_dir"]
+        table_name = self.info["table_name"]
+
+        filename = ".".join(("_".join((table_name, suffix)), "txt"))
+        return path.join(table_dir, filename)
+
+    @property
+    def visual_labels(self) -> List[str]:
+        return [
+            f"{momenta[0]} <= {self.dependant_variable_1} < {momenta[1]} {self.unit_1} & {angles[0]} <= {self.dependant_variable_2} < {angles[1]} {self.unit_2}"
+            for r, c, momenta, angles in self.iterator
+        ]
+
+    def _extract_central_values(self):
+        return [
+            self.central_values_table.iloc[row, column]
+            for row, column, ps, ths in self.iterator
+        ]
+
+    def _extract_errors(self, table: DataFrame):
+        return [table.iloc[row, column] for row, column, ps, ths in self.iterator]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+
+        column_name_1 = self._build_column_name(prefix, self.dependant_variable_1)
+        column_name_2 = self._build_column_name(prefix, self.dependant_variable_2)
+
+        queries = [
+            f"{momenta[0]} <= {column_name_1} < {momenta[1]} & {angles[0]} <= {column_name_2} < {angles[1]}"
+            for r, c, momenta, angles in self.iterator
+        ]
+        queries = self.add_extra_cuts(queries, prefix)
+
+        return queries
+
+    def populate_uncertainties(self):
+        sysvar_uncertainties = get_uncertainty_types()
+
+        for unc_name, unc_ctgy in self.info["error_correlations"].items():
+
+            if unc_name == "stat":
+                unc_values = self._extract_errors(self.stat_error_table)
+            elif unc_name == "sys":
+                unc_values = self._extract_errors(self.sys_error_table)
+            else:
+                raise NotImplementedError(
+                    "Only stat and sys error have been implemented now"
+                )
+
+            self.add_uncertainty(
+                unc_name=unc_name,
+                unc_values=unc_values,
+                unc_obj=sysvar_uncertainties[unc_ctgy],
+            )
+
+
+@dataclass
 class Correction2DCategorical(BaseCorrection):
 
     categorical_variable: str | None = None
@@ -649,6 +769,7 @@ def create_correction_object(syst_effect: str, MC_prod: str) -> BaseCorrection:
     """
     correction_types = {
         "1D": Correction1D,
+        "2D": Correction2D,
         "2DCategorical": Correction2DCategorical,
         "BF": CorrectionBF,
         "PID": CorrectionPID,
