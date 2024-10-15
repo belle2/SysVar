@@ -178,6 +178,13 @@ class Template(ABC, SavableAttributesObject):
             ]
         elif isinstance(self.correction, CorrectionBF):
             variables = [self.syst_weight, self.correction.dependant_variable]
+        elif isinstance(self.correction, Correction2D):
+            variables = [
+                self.syst_weight,
+                self.correction.dependant_variable_1,
+                self.correction.dependant_variable_2,
+                *list(self.correction.info["extra_cuts"].keys()),
+            ]
         elif isinstance(self.correction, CorrectionPID):
             variables = [
                 self.syst_weight,
