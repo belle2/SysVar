@@ -36,11 +36,16 @@ class EigenDecomposer(SavableAttributesObject):
         self.settings = settings
         self.syst_effect = syst_effect
 
-        self.correction = create_correction_object(syst_effect, settings["MC_prod"])
-        self.variator = Variator(self.correction, Nvar=settings["Nvar"])
+        if syst_effect is not None:
+            self.correction = create_correction_object(syst_effect, settings["MC_prod"])
+            self.variator = Variator(self.correction, Nvar=settings["Nvar"])
+            self.N_important_dims = 0
+            self.important_dims_indices = None
+        else:
+            # This is useful for saving nominal templates
+            self.correction = None
+            self.variator = None
         self.templates = self._create_varied_templates()
-        self.N_important_dims = 0
-        self.important_dims_indices = None
 
     @property
     def decay_modes(self) -> list:
@@ -104,12 +109,16 @@ class EigenDecomposer(SavableAttributesObject):
             >>> self._determine_reco_channels()
             ['channel1', 'channel2']
         """
-        return [
-            reco_channel_name
-            for reco_channel_name in self.settings["reco_channels"].keys()
-            if reco_channel_name in self._included_channels
-            and reco_channel_name not in self._excluded_channels
-        ]
+        if self.syst_effect is None:
+            reco_channels = self.settings["reco_channels"].keys()
+        else:
+            reco_channels = [
+                reco_channel_name
+                for reco_channel_name in self.settings["reco_channels"].keys()
+                if reco_channel_name in self._included_channels
+                and reco_channel_name not in self._excluded_channels
+            ]
+        return reco_channels
 
     @property
     def template_names(self) -> list:
@@ -147,7 +156,7 @@ class EigenDecomposer(SavableAttributesObject):
 
     @cached_property
     def combined_variations(self) -> np.ndarray:
-        return np.vstack([x._get_absolute_variations() for x in tqdm(self.templates)])
+        return np.vstack([x._get_absolute_variations() for x in self.templates])
 
     @property
     def cov(self) -> np.ndarray:
@@ -180,6 +189,9 @@ class EigenDecomposer(SavableAttributesObject):
 
         total_N_vectors = len(self.eigen_vectors)
         max_differences = []
+        logging.warn(
+            "Only the first 50 eigendirections will be considered to find the maximum number of eigenvariations. This is an arbitrary choice as it's highly unlikely that an analysis will use > 50 nuisance parameters for only one systematic source."
+        )
         for n_vectors in tqdm(range(total_N_vectors)):
 
             dimension_subset = self.eigen_variations[:, :n_vectors].T
@@ -195,10 +207,6 @@ class EigenDecomposer(SavableAttributesObject):
             if n_vectors > 49:
                 break
 
-        logging.warn(
-            "Only the first 50 eigendirections have been considered to find the maximum number of eigenvariations. This is an arbitrary choice as it's highly unlikely that an analysis will use > 50 nuisance parameters for only one systematic source"
-        )
-
         return max_differences
 
     @staticmethod
@@ -209,6 +217,10 @@ class EigenDecomposer(SavableAttributesObject):
 
         previous_reco_mode = None
         varied_templates = []
+        # Extract column names from settings for readability
+        reco_col = self.settings["reco_channel_id_column"]
+        template_col = self.settings["template_id_column"]
+
         for reco_mode, template_name in self.iterator:
 
             if reco_mode != previous_reco_mode:
@@ -216,19 +228,12 @@ class EigenDecomposer(SavableAttributesObject):
                     "########## Reco channel: %s ##########", str(reco_mode[1])
                 )
 
-            # Extract column names from settings for readability
-            reco_col = self.settings["reco_channel_id_column"]
-            template_col = self.settings["template_id_column"]
-
             # Apply the filter using .loc for better performance
             tmp_df = self.df.loc[
                 (self.df[reco_col].isin(reco_mode[0]))
                 & (self.df[template_col] == template_name)
             ]
 
-            # tmp_df = self.df.query(
-            #    f"{self.settings['reco_channel_id_column']} in @reco_mode[0] & {self.settings['template_id_column']} == '{template_name}'"
-            # )
             # Skip template create if the query yields an empty dataframe
             if len(tmp_df) < 1:
                 logging.warn("Skipping template %s", str(template_name))
@@ -241,12 +246,21 @@ class EigenDecomposer(SavableAttributesObject):
                 self.settings["bins"][reco_mode[1]]
             )
 
+            # TODO I don't like the switch between nominal and varied templates
             t = template(
                 df=tmp_df,
                 binning=self.settings["bins"][reco_mode[1]],
                 total_weight=self.settings["total_weight"],
-                syst_weight=self.settings["systematics"][self.syst_effect]["weight"],
-                prefices=self.settings["systematics"][self.syst_effect]["prefices"],
+                syst_weight=(
+                    self.settings["systematics"][self.syst_effect]["weight"]
+                    if self.syst_effect is not None
+                    else None
+                ),
+                prefices=(
+                    self.settings["systematics"][self.syst_effect]["prefices"]
+                    if self.syst_effect is not None
+                    else None
+                ),
                 correction=self.correction,
                 variator=self.variator,
             )
@@ -257,7 +271,8 @@ class EigenDecomposer(SavableAttributesObject):
                     "Building %s for %s", str(type(t).__name__), str(template_name)
                 )
 
-            t.add_variations()
+            if self.syst_effect is not None:
+                t.add_variations()
 
             varied_templates.append(t)
 
@@ -422,20 +437,30 @@ class EigenDecomposer(SavableAttributesObject):
             for (tree, ctgy), t in zip(self.iterator, self.templates):
 
                 if tree != previous_tree:
+                    logging.info(50 * "#")
                     logging.info("########## Reco channel: %s ##########", str(tree[1]))
+                    logging.info(50 * "#")
 
                 branch_name = self._get_TBranch_name(tree[1], ctgy, "Nominal")
-                logging.info("Saving Nominal %s in TBranch: %s", str(ctgy), branch_name)
+                logging.info(
+                    "Saving Nominal MC template %s in TBranch: %s",
+                    str(ctgy),
+                    branch_name,
+                )
 
                 newfile[branch_name] = t.make_hist()
-
-                if f"{tree}/Data/Nominal" not in newfile.keys():
-                    logging.info("Adding empty Data for region: %s", tree[1])
-                    # Save empty data now as we work only on Asimov
-                    newfile[f"{tree[1]}/Data/Nominal"] = np.array([0, 0, 0]), np.array(
-                        [0, 1, 2, 3]
-                    )
                 previous_tree = tree
+
+            logging.info(50 * "#")
+            logging.info("########## Observed data ##########")
+            logging.info(50 * "#")
+            for tree in self.decay_modes:
+                filedir = f"{tree[1]}/Data/Nominal"
+                logging.info(
+                    "Adding empty observed Data for region: %s in %s", tree[1], filedir
+                )
+                # Save empty data now as we work only on Asimov
+                newfile[filedir] = np.array([0, 0, 0]), np.array([0, 1, 2, 3])
 
     def save_template_variations(self, filepath=None):
 
@@ -454,7 +479,9 @@ class EigenDecomposer(SavableAttributesObject):
             ):
 
                 if tree != previous_tree:
+                    logging.info(50 * "#")
                     logging.info("########## Reco channel: %s ##########", str(tree[1]))
+                    logging.info(50 * "#")
 
                 nominal = t.make_hist()
 
@@ -466,7 +493,9 @@ class EigenDecomposer(SavableAttributesObject):
                         tree[1], ctgy, f"{self.syst_effect}_var{n_var+1}_up"
                     )
                     logging.info(
-                        "Saving Variation of %s in TBranch: %s", str(ctgy), branch_name
+                        "Saving Up variation of MC template %s in TBranch: %s",
+                        str(ctgy),
+                        branch_name,
                     )
 
                     newfile[branch_name] = nominal[0] + var, nominal[1]
@@ -475,7 +504,9 @@ class EigenDecomposer(SavableAttributesObject):
                         tree[1], ctgy, f"{self.syst_effect}_var{n_var+1}_down"
                     )
                     logging.info(
-                        "Saving Variation of %s in TBranch: %s", str(ctgy), branch_name
+                        "Saving Down variation of %s in TBranch: %s",
+                        str(ctgy),
+                        branch_name,
                     )
 
                     newfile[branch_name] = nominal[0] - var, nominal[1]
