@@ -141,7 +141,6 @@ class Variator(ABC, SavableAttributesObject):
         visualizer.plot_cov_and_corr(save=save, filename=filename)
 
     def plot_gaussian_variations(self, save: bool = False, filename: str = ""):
-        self._check_saving_status()
         visualizer = VariatorVisualizer(self)
         visualizer.plot_gaussian_variations(save=save, filename=filename)
 
@@ -149,6 +148,5 @@ class Variator(ABC, SavableAttributesObject):
         self, nbins: int = 41, save: bool = False, filename: str = ""
     ):
 
-        self._check_saving_status()
         visualizer = VariatorVisualizer(self)
         visualizer.plot_relative_variations_in_grid(nbins, save=save, filename=filename)

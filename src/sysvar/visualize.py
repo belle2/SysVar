@@ -30,6 +30,7 @@ from sysvar.saver import PlotSaver
 
 PALETTE = sns.color_palette("colorblind")
 CMAP = "Blues"
+DPI = 100
 
 
 class Visualizer(ABC):
@@ -38,7 +39,7 @@ class Visualizer(ABC):
         super().__init__()
 
     def create_single_figure(self):
-        return plt.subplots(figsize=(8, 5), dpi=800)
+        return plt.subplots(figsize=(8, 5), dpi=DPI)
 
     def available_plots(
         self,
@@ -60,7 +61,7 @@ class Visualizer(ABC):
 
     def plot_cov_and_corr(self, save: bool = False, filename: str = ""):
 
-        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=800, sharey=True)
+        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=DPI, sharey=True)
 
         self.plot_cov_matrix(ax[0])
         self.plot_corr_matrix(ax[1])
@@ -151,7 +152,7 @@ class CorrectionVisualizer(Visualizer):
 
     def plot_error_comparison(self, save: bool = False, filename: str = ""):
 
-        fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         # Plot the central values of the correction
         ax.errorbar(
@@ -225,7 +226,7 @@ class UncertaintyVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.cov_matrix,
@@ -247,7 +248,7 @@ class UncertaintyVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -316,7 +317,7 @@ class VariatorVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.cov_matrix,
@@ -334,7 +335,7 @@ class VariatorVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -361,7 +362,7 @@ class VariatorVisualizer(Visualizer):
         """
 
         fig, ax = plt.subplots(
-            1, len(self.instance.correction.central_values), figsize=(16, 4.5), dpi=800
+            1, len(self.instance.correction.central_values), figsize=(16, 4.5), dpi=DPI
         )
 
         for i, (mean, s) in enumerate(
@@ -404,7 +405,7 @@ class VariatorVisualizer(Visualizer):
 
         """
 
-        fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         for i in range(Nvar):
             self.plot_variation_on_axis(
@@ -480,8 +481,14 @@ class TemplateVisualizer(Visualizer):
         ax.set_ylabel("Bins")
 
     def plot_relative_variations_in_grid(
-        self, ax, nbins: int = 11, save: bool = False, filename: str = ""
+        self,
+        ax: Axes | None = None,
+        nbins: int = 11,
+        save: bool = False,
+        filename: str = "",
     ):
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         counts = []
         bin_edges = []
@@ -535,7 +542,7 @@ class TemplateVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.cov_matrix,
@@ -557,7 +564,7 @@ class TemplateVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -578,7 +585,7 @@ class TemplateVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         self.plot_variation_on_axis(
             ax,
@@ -602,7 +609,7 @@ class TemplateVisualizer(Visualizer):
 
     def plot_variations(self, Nvar: int = 5, save: bool = False, filename: str = ""):
 
-        fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+        fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         for i in range(Nvar):
 
@@ -630,7 +637,9 @@ class TemplateVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(
+                2, 1, figsize=(8, 5), dpi=DPI, height_ratios=[3.5, 1]
+            )
 
         x = np.linspace(0, 1, self.instance.Nbins)
 
@@ -655,18 +664,18 @@ class TemplateVisualizer(Visualizer):
             linestyle="dashed",
         )
 
-        ax[0].fill_between(
-            x,
-            1
-            - np.sqrt(self.instance.nom_hist[0].flatten())
-            / self.instance.nom_hist[0].flatten(),
-            1
-            + np.sqrt(self.instance.nom_hist[0].flatten())
-            / self.instance.nom_hist[0].flatten(),
-            color="grey",
-            alpha=0.25,
-            label="Stat error",
-        )
+        #        ax[0].fill_between(
+        #            x,
+        #            1
+        #            - np.sqrt(self.instance.nom_hist[0].flatten())
+        #            / self.instance.nom_hist[0].flatten(),
+        #            1
+        #            + np.sqrt(self.instance.nom_hist[0].flatten())
+        #            / self.instance.nom_hist[0].flatten(),
+        #            color="grey",
+        #            alpha=0.25,
+        #            label="Stat error",
+        #        )
 
         ax[0].set_ylabel("Template relative variation")
         ax[0].legend()
@@ -701,7 +710,7 @@ class TemplateVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         x = np.arange(self.instance.Nbins)
 
@@ -737,7 +746,7 @@ class TemplateVisualizer(Visualizer):
     def plot_systematic_overview(self, save: bool = False, filename: str = ""):
 
         # gridspec inside gridspec
-        fig = plt.figure(figsize=(16, 10), dpi=800)
+        fig = plt.figure(figsize=(16, 10), dpi=DPI)
 
         gs = mpl.gridspec.GridSpec(2, 6, wspace=0.4, hspace=0.15)
 
@@ -803,7 +812,7 @@ class FFModelVisualizer(Visualizer):
     def plot_cov_matrix(self, ax: Axes | None = None):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.cov_matrix,
@@ -820,7 +829,7 @@ class FFModelVisualizer(Visualizer):
     def plot_corr_matrix(self, ax: Axes | None = None):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -850,7 +859,7 @@ class FFModelVisualizer(Visualizer):
     def plot_params(self, ax: Axes | None = None):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         ax.errorbar(
             x=np.arange(self.instance.num_params) + 0.5,
@@ -886,7 +895,7 @@ class FFModelVisualizer(Visualizer):
 
     def plot_corr_and_params(self):
 
-        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=800)
+        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=DPI)
 
         self.plot_params(ax[0])
 
@@ -921,7 +930,7 @@ class EigenDecomposerVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         sns.heatmap(
             self.instance.corr,
@@ -944,7 +953,7 @@ class EigenDecomposerVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         x = np.arange(self.instance.eigen_values.shape[0])
 
@@ -987,7 +996,7 @@ class EigenDecomposerVisualizer(Visualizer):
     ):
 
         if ax is None:
-            fig, ax = plt.subplots(figsize=(8, 5), dpi=800)
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
 
         total_N_eigendirections = self.instance.eigen_values.shape[0]
         x = np.arange(len(self.instance.max_differences))

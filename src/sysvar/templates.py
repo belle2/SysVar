@@ -31,10 +31,10 @@ class Template(ABC, SavableAttributesObject):
         df: DataFrame,
         binning: dict,
         total_weight: str,
-        syst_weight: None | str,
-        prefices: str | list,
-        correction: None | BaseCorrection,
-        variator: None | Variator,
+        syst_weight: None | str = None,
+        prefices: None | str | list = None,
+        correction: None | BaseCorrection = None,
+        variator: None | Variator = None,
     ):
         super().__init__()
         if self._is_correct_binning(df.columns, binning):
@@ -160,7 +160,7 @@ class Template(ABC, SavableAttributesObject):
 
         # Initialize the base columns.
         # TODO the channel and fit_ctgy should not be hardcoded here
-        columns = ["channel", "fit_ctgy", self.total_weight, *list(self.binning.keys())]
+        columns = ["channel", "template", self.total_weight, *list(self.binning.keys())]
 
         # Collect the prefices
         prefices = (
@@ -193,6 +193,8 @@ class Template(ABC, SavableAttributesObject):
                 self.correction.PDG,
                 self.correction.mcPDG,
             ]
+        elif self.correction is None:
+            variables = []
 
         # Construct the column names
         for prefix in prefices:
@@ -400,7 +402,7 @@ class Template1D(Template):
         df: DataFrame,
         binning: dict,
         total_weight: str,
-        syst_weight: str,
+        syst_weight: str = None,
         prefices: str | list = None,
         correction: None | BaseCorrection = None,
         variator: None | Variator = None,
@@ -460,3 +462,8 @@ class Template2D(Template):
 
         self.visualizer = TemplateVisualizer(self)
         self.visualizer.plot_relative_variations_in_grid(save=save, filename=filename)
+
+    def plot_up_and_down_variations(self, save: bool = False, filename: str = ""):
+
+        self.visualizer = TemplateVisualizer(self)
+        self.visualizer.plot_up_and_down_variations(save=save, filename=filename)
