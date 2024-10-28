@@ -460,7 +460,13 @@ class CorrectionBF(BaseCorrection):
         ]
         strings = []
         for daughter_set in daughter_pdgs:
-            daughter_names = [Particle.from_pdgid(x).latex_name for x in daughter_set]
+            daughter_names = []
+            for x in daughter_set:
+                try:
+                    daughter_names.append(Particle.from_pdgid(x).latex_name)
+                except:
+                    daughter_names.append(x)
+
             strings.append(
                 rf"${mother} \rightarrow {' '.join(str(x) for x in daughter_names)}$"
             )
@@ -510,8 +516,14 @@ class CorrectionBF(BaseCorrection):
 
         column_name = self._build_column_name(prefix, self.dependant_variable)
         queries = [
-            f"{column_name} == '{mode['dmID']}'" for mode in self.info["modes"].values()
+            (
+                f"{column_name} == '{mode['dmID']}'"
+                if isinstance(mode["dmID"], str)
+                else f"{column_name} in {mode['dmID']}"
+            )
+            for mode in self.info["modes"].values()
         ]
+
         queries = self.add_extra_cuts(queries, prefix)
 
         return queries
