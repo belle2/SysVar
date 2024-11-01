@@ -484,12 +484,13 @@ class CorrectionBF(BaseCorrection):
             [0 for x in self.info["modes"].values()],
         )
 
-        # Safe 0 division. Returns 1+- 0 for the ones where decay.dec = 0
+        # Safe 0 division. Returns 1+- 0 for the ones where
+        # decay.dec = 0 or pdg = 0
         corrections = np.divide(
             pdg_BFs,
             decaydec_BFs,
             out=unp.uarray(np.ones_like(pdg_BFs), np.zeros_like(pdg_BFs)),
-            where=decaydec_BFs != 0,
+            where=((decaydec_BFs != 0) & (pdg_BFs != 0)),
         )
 
         return list(unp.nominal_values(corrections)), list(unp.std_devs(corrections))
