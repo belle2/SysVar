@@ -834,7 +834,7 @@ class CorrectionTableFinder:
                 ],
             },
             "muon": {
-                "true_pdgs": [13, -11],
+                "true_pdgs": [13, -13],
                 "fake_pdgs": [321, 211, -321, -211],
                 "eff_table_ids": ["mu_efficiency"],
                 "fake_rate_table_ids": [
