@@ -1,0 +1,21 @@
+name: sysvar
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python
+  - pip
+  - numpy
+  - scipy
+  - pandas
+  - tqdm
+  - matplotlib
+  - seaborn
+  - pytest
+  - pytest-cov
+  - tox
+  - pre_commit
+  - nbdime
+  - nbstripout
+  - sphinx
+  - recommonmark
