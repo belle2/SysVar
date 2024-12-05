@@ -395,6 +395,21 @@ class Template(ABC, SavableAttributesObject):
 
         return weights
 
+    def plot_systematic_overview(self, save: bool = False, filename: str = ""):
+
+        self.visualizer = TemplateVisualizer(self)
+        self.visualizer.plot_systematic_overview(save=save, filename=filename)
+
+    def plot_relative_variations_in_grid(self, save: bool = False, filename: str = ""):
+
+        self.visualizer = TemplateVisualizer(self)
+        self.visualizer.plot_relative_variations_in_grid(save=save, filename=filename)
+
+    def plot_up_and_down_variations(self, save: bool = False, filename: str = ""):
+
+        self.visualizer = TemplateVisualizer(self)
+        self.visualizer.plot_up_and_down_variations(save=save, filename=filename)
+
 
 class Template1D(Template):
     def __init__(
@@ -425,7 +440,7 @@ class Template1D(Template):
         return hist[0].flatten(), hist[1].flatten()
 
 
-class Template2D(Template):
+class TemplateND(Template):
     def __init__(
         self,
         df: DataFrame,
@@ -452,18 +467,3 @@ class Template2D(Template):
             weights=weights,
         )
         return (hist[0].flatten(), np.linspace(0, 1, hist[0].flatten().shape[0] + 1))
-
-    def plot_systematic_overview(self, save: bool = False, filename: str = ""):
-
-        self.visualizer = TemplateVisualizer(self)
-        self.visualizer.plot_systematic_overview(save=save, filename=filename)
-
-    def plot_relative_variations_in_grid(self, save: bool = False, filename: str = ""):
-
-        self.visualizer = TemplateVisualizer(self)
-        self.visualizer.plot_relative_variations_in_grid(save=save, filename=filename)
-
-    def plot_up_and_down_variations(self, save: bool = False, filename: str = ""):
-
-        self.visualizer = TemplateVisualizer(self)
-        self.visualizer.plot_up_and_down_variations(save=save, filename=filename)

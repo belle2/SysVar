@@ -13,7 +13,7 @@ import uproot
 
 from sysvar.corrections import create_correction_object
 from sysvar.variations import Variator
-from sysvar.templates import Template1D, Template2D
+from sysvar.templates import Template1D, TemplateND
 from sysvar.visualize import EigenDecomposerVisualizer
 from sysvar.utils import SavableAttributesObject
 
@@ -238,7 +238,7 @@ class EigenDecomposer(SavableAttributesObject):
             if len(tmp_df) < 1:
                 logging.warn("Skipping template %s", str(template_name))
                 # PATCH FIX
-                # This just creates an empty dataframe so that Template2D doesn't fail.
+                # This just creates an empty dataframe so that TemplateND doesn't fail.
                 # Maybe it's okay to keep doing this w/o a fix
                 tmp_df = DataFrame(0, index=np.arange(1), columns=self.df.columns)
 
@@ -265,7 +265,7 @@ class EigenDecomposer(SavableAttributesObject):
                 variator=self.variator,
             )
 
-            # FIX this defaults to Template2D logging. Make it more generic
+            # FIX this defaults to TemplateND logging. Make it more generic
             if not len(tmp_df) < 1:
                 logging.info(
                     "Building %s for %s", str(type(t).__name__), str(template_name)
@@ -288,7 +288,7 @@ class EigenDecomposer(SavableAttributesObject):
             binning (dict): A dictionary representing the binning configuration.
 
         Returns:
-            class: The appropriate template class (`Template1D` or `Template2D`).
+            class: The appropriate template class (`Template1D` or `TemplateND`).
 
         Raises:
             NotImplementedError: If the binning dimensionality is not 1D or 2D.
@@ -302,7 +302,7 @@ class EigenDecomposer(SavableAttributesObject):
             >>> binning = {'x': [0, 1, 2, 3], 'y': [0, 1, 2]}
             >>> template_class = _get_template_child_class(binning)
             >>> template_class
-            <class 'Template2D'>
+            <class 'TemplateND'>
 
             >>> binning = {'x': [0, 1, 2, 3], 'y': [0, 1, 2], 'z': [0, 1]}
             >>> template_class = _get_template_child_class(binning)
@@ -312,11 +312,11 @@ class EigenDecomposer(SavableAttributesObject):
         """
         if len(binning.keys()) == 1:
             template = Template1D
-        elif len(binning.keys()) == 2:
-            template = Template2D
+        elif len(binning.keys()) > 1:
+            template = TemplateND
         else:
             raise NotImplementedError(
-                "Only 1D and 2D histograms are implemented so far. Please check the binning of your reconstruction channels."
+                "Only 1D and ND histograms are implemented so far. Please check the binning of your reconstruction channels."
             )
 
         return template
