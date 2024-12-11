@@ -21,7 +21,7 @@ from .uncertainties import (
     UncorrelatedUncertainty,
     get_uncertainty_types,
 )
-from sysvar.utils import read_yaml, SavableAttributesObject
+from sysvar.utils import SavableAttributesObject, read_yaml
 from sysvar.visualize import CorrectionVisualizer, UncertaintyVisualizer
 
 import logging

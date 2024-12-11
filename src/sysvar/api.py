@@ -6,6 +6,7 @@ from os import path
 import numpy as np
 from pandas import DataFrame, concat, read_csv
 
+from sysvar.variations import Variator
 from sysvar.corrections import create_correction_object
 from sysvar.eigendecomposer import EigenDecomposer
 from sysvar.visualize import CorrectionVisualizer, UncertaintyVisualizer
@@ -25,6 +26,7 @@ def add_weights_to_dataframe(
     prefix: str,
     weightname: str,
     overwrite: bool = False,
+    Nvar: int = 0,
 ):
     """
     Add weights to a DataFrame based on a correction object.
@@ -34,26 +36,40 @@ def add_weights_to_dataframe(
         correction: The correction object containing central values and queries.
         weightname (str): The name of the weight column to add.
         overwrite (bool, optional): Whether to overwrite the weight column if it already exists.
+        Nvar: Number of variations to add to the dataframe. If 0, only the central value is added.
 
     Returns:
         None
 
     """
 
-    def _add_weights(df, correction, prefix, column_name):
+    if Nvar < 0:
+        raise ValueError("Nvar must be a positive integer")
+
+    def _add_weights(df, correction, prefix, column_name, variator=None):
 
         df.loc[:, column_name] = 1.0
-        for v, q in zip(correction.central_values, correction.build_queries(prefix)):
+        if variator is not None:
+            variation_columns = [f"{column_name}_var_{j}" for j in range(variator.Nvar)]
+
+        for i, (v, q) in enumerate(
+            zip(correction.central_values, correction.build_queries(prefix))
+        ):
             mask = df.eval(q)
             df.loc[mask, column_name] = v
+
+            if variator is not None:
+                df.loc[mask, variation_columns] = variator.variations[:, i]
 
     correction = create_correction_object(systematic, MC_production)
     column_name = correction._build_column_name(prefix, weightname)
 
+    variator = Variator(correction, Nvar) if Nvar > 0 else None
+
     if column_name in df.columns and overwrite:
         logging.info("%s exists but it will be overwriten", column_name)
 
-        _add_weights(df, correction, prefix, column_name)
+        _add_weights(df, correction, prefix, column_name, variator)
 
     elif column_name in df.columns and not overwrite:
 
@@ -63,7 +79,7 @@ def add_weights_to_dataframe(
         )
     elif column_name not in df.columns:
         logging.info("%s does not exist. Adding it to dataframe", column_name)
-        _add_weights(df, correction, prefix, column_name)
+        _add_weights(df, correction, prefix, column_name, variator)
 
 
 def eigendecompose(
