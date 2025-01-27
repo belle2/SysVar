@@ -51,6 +51,7 @@ def add_weights_to_dataframe(
         df.loc[:, column_name] = 1.0
         if variator is not None:
             variation_columns = [f"{column_name}_var_{j}" for j in range(variator.Nvar)]
+            df.loc[:, variation_columns] = 1.0
 
         for i, (v, q) in enumerate(
             zip(correction.central_values, correction.build_queries(prefix))
