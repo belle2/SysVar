@@ -33,7 +33,7 @@ The best practice to follow for using/contributing to the package are as follows
     ```bash
     pip install -e .
     ```
-    For end-users:
+    For end-users (not recommended currently):
     ```bash
     pip install .
     ```
