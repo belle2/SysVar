@@ -123,11 +123,11 @@ def eigendecompose(
     return egd
 
 
-def save_nominal_templates(df: DataFrame, settings: Dict):
+def save_nominal_templates(df: DataFrame, settings: Dict, data=None):
 
     # Create an eigendecomposer object without any systematic effect
     egd = EigenDecomposer(df=df, settings=settings, syst_effect=None)
-    egd.save_nominal_templates()
+    egd.save_nominal_templates(data=data)
 
 
 def plot_analysis_corr_matrix(

@@ -421,7 +421,7 @@ class EigenDecomposer(SavableAttributesObject):
     def _get_TBranch_name(*args):
         return "/".join(args)
 
-    def save_nominal_templates(self, filepath=None):
+    def save_nominal_templates(self, filepath=None, data=None):
 
         # FIX there needs to be a check here to not recreate the file if it already exists or has nominal templates.
         # Now the user needs to be careful to not mess up the file and lose previously written nominals
@@ -456,11 +456,33 @@ class EigenDecomposer(SavableAttributesObject):
             logging.info(50 * "#")
             for tree in self.decay_modes:
                 filedir = f"{tree[1]}/Data/Nominal"
-                logging.info(
-                    "Adding empty observed Data for region: %s in %s", tree[1], filedir
-                )
-                # Save empty data now as we work only on Asimov
-                newfile[filedir] = np.array([0, 0, 0]), np.array([0, 1, 2, 3])
+                if data is None:
+                    logging.info(
+                        "Adding empty observed Data for region: %s in %s",
+                        tree[1],
+                        filedir,
+                    )
+                    # Save empty data now as we work only on Asimov
+                    newfile[filedir] = np.array([0, 0, 0]), np.array([0, 1, 2, 3])
+                else:
+                    if not isinstance(data, DataFrame):
+                        raise TypeError("data must be a pandas DataFrame")
+
+                    reco_col = self.settings["reco_channel_id_column"]
+                    binning = self.settings["bins"][tree[1]]
+
+                    hist = np.histogramdd(
+                        np.array(
+                            data.query(f"{reco_col} in {tree[0]}")[[*binning.keys()]]
+                        ),
+                        bins=[bins for bins in binning.values()],
+                    )
+                    logging.info(
+                        "Adding observed Data region : %s in %s", tree[1], filedir
+                    )
+                    newfile[filedir] = hist[0].flatten(), np.linspace(
+                        0, 1, hist[0].flatten().shape[0] + 1
+                    )
 
     def save_template_variations(self, filepath=None):
 
