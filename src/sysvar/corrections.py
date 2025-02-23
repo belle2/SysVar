@@ -587,13 +587,13 @@ class CorrectionPID(BaseCorrection):
 
         table_finders = []
         if "eID" in self.systematic:
-            table_finders.append(CorrectionTableFinder.electrons(self.info))
+            table_finders.append(CorrectionTableFinder.electrons(self.info, self.MC_production))
         if "muID" in self.systematic:
-            table_finders.append(CorrectionTableFinder.muons(self.info))
+            table_finders.append(CorrectionTableFinder.muons(self.info, self.MC_production))
         elif "kID" in self.systematic:
-            table_finders.append(CorrectionTableFinder.kaons(self.info))
+            table_finders.append(CorrectionTableFinder.kaons(self.info, self.MC_production))
         elif "piID" in self.systematic:
-            table_finders.append(CorrectionTableFinder.pions(self.info))
+            table_finders.append(CorrectionTableFinder.pions(self.info, self.MC_production))
 
         eff_table = concat([x.eff_table for x in table_finders])
         fake_rate_table = concat([x.fake_rate_table for x in table_finders])
@@ -739,11 +739,14 @@ class CorrectionTableFinder:
     Factory method class to get correction tables for kaons,  pions, electrons and muons
     """
 
-    def __init__(self, particle_species, online_cut, base_table_path, variable):
+    def __init__(self, particle_species, online_cut, base_table_path, variable, MC_production):
         self.particle_species = particle_species
         self.online_cut = online_cut
         self.base_table_path = base_table_path
         self.variable = variable
+        self.MC_production = MC_production
+
+        self.production_table_ids()
 
         self.true_pdg = self.particle_species_settings[particle_species]["true_pdgs"]
         self.fake_pdg = self.particle_species_settings[particle_species]["fake_pdgs"]
@@ -762,7 +765,7 @@ class CorrectionTableFinder:
         self.fake_rate_table = self.get_table(fake_rate_table_names)
 
     @classmethod
-    def kaons(cls, external_info):
+    def kaons(cls, external_info, MC_production):
 
         particle_species = "kaon"
 
@@ -771,10 +774,11 @@ class CorrectionTableFinder:
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
             variable=None,
+            MC_production = MC_production,
         )
 
     @classmethod
-    def pions(cls, external_info):
+    def pions(cls, external_info, MC_production):
 
         particle_species = "pion"
 
@@ -783,10 +787,11 @@ class CorrectionTableFinder:
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
             variable=None,
+            MC_production = MC_production,
         )
 
     @classmethod
-    def electrons(cls, external_info):
+    def electrons(cls, external_info, MC_production):
 
         particle_species = "elec"
 
@@ -795,10 +800,11 @@ class CorrectionTableFinder:
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
             variable=external_info["variable"],
+            MC_production = MC_production,
         )
 
     @classmethod
-    def muons(cls, external_info):
+    def muons(cls, external_info, MC_production):
 
         particle_species = "muon"
 
@@ -807,43 +813,80 @@ class CorrectionTableFinder:
             online_cut=external_info["online_cut"],
             base_table_path=external_info["table_paths"],
             variable=external_info["variable"],
+            MC_production = MC_production,
         )
+
+    def production_table_ids(self):
+        """
+        Updates hadron table IDs based on the MC production type.
+
+        Raises:
+            ValueError: If an unsupported MC production type is provided.
+        """
+        if self.MC_production not in ["MC15ri", "MC15rd"]:
+            raise ValueError("Invalid production type. Must be 'MC15ri' or 'MC15rd'.")
+
+        eff_table_mapping = {
+            "MC15ri": {"kaon": "keff", 
+                        "pion": "pieff"},
+            "MC15rd": {"kaon": "KEff",
+                        "pion": "piEff"},
+        }
+
+        fake_table_mapping = {
+            "MC15ri": {"kaon": "piFk", 
+                        "pion": "kFpi"},
+            "MC15rd": {"kaon": "piFakeK",
+                        "pion": "KFakepi"},
+        }
+
+        if self.particle_species in ["kaon", "pion"]:
+            self.particle_species_settings[self.particle_species]["eff_table_ids"] = [
+            eff_table_mapping[self.MC_production][self.particle_species]
+                ]
+
+            self.particle_species_settings[self.particle_species]["fake_rate_table_ids"] = [
+            fake_table_mapping[self.MC_production][self.particle_species]
+                ]
+
 
     @property
     def particle_species_settings(self) -> dict:
+        if not hasattr(self, '_particle_species_settings'):
+            self._particle_species_settings = {
+                "kaon": {
+                    "true_pdgs": [321, -321],
+                    "fake_pdgs": [211, -211],
+                    "eff_table_ids": ["keff"],
+                    "fake_rate_table_ids": ["piFk"],
+                },
+                "pion": {
+                    "true_pdgs": [211, -211],
+                    "fake_pdgs": [321, -321],
+                    "eff_table_ids": ["pieff"],
+                    "fake_rate_table_ids": ["kFpi"],
+                },
+                "elec": {
+                    "true_pdgs": [11, -11],
+                    "fake_pdgs": [321, 211, -321, -211],
+                    "eff_table_ids": ["e_efficiency"],
+                    "fake_rate_table_ids": [
+                        "K_e_fakeRate",
+                        "pi_e_fakeRate",
+                    ],
+                },
+                "muon": {
+                    "true_pdgs": [13, -13],
+                    "fake_pdgs": [321, 211, -321, -211],
+                    "eff_table_ids": ["mu_efficiency"],
+                    "fake_rate_table_ids": [
+                        "K_mu_fakeRate",
+                        "pi_mu_fakeRate",
+                    ],
+                },
+            }
+        return self._particle_species_settings
 
-        return {
-            "kaon": {
-                "true_pdgs": [321, -321],
-                "fake_pdgs": [211, -211],
-                "eff_table_ids": ["keff"],
-                "fake_rate_table_ids": ["piFk"],
-            },
-            "pion": {
-                "true_pdgs": [211, -211],
-                "fake_pdgs": [321, -321],
-                "eff_table_ids": ["pieff"],
-                "fake_rate_table_ids": ["kFpi"],
-            },
-            "elec": {
-                "true_pdgs": [11, -11],
-                "fake_pdgs": [321, 211, -321, -211],
-                "eff_table_ids": ["e_efficiency"],
-                "fake_rate_table_ids": [
-                    "K_e_fakeRate",
-                    "pi_e_fakeRate",
-                ],
-            },
-            "muon": {
-                "true_pdgs": [13, -13],
-                "fake_pdgs": [321, 211, -321, -211],
-                "eff_table_ids": ["mu_efficiency"],
-                "fake_rate_table_ids": [
-                    "K_mu_fakeRate",
-                    "pi_mu_fakeRate",
-                ],
-            },
-        }
 
     def get_cut_type(
         self,
@@ -924,27 +967,41 @@ class CorrectionTableFinder:
         return [path.join(self.base_table_path, x) for x in file_names]
 
     def build_hid_table_name(self, table_id, charge):
-        return "_".join(
-            (
-                "Rdtmc",
-                table_id,
-                charge,
-                self.cut_type + "0-" + str(self.value)[-1],
-                "all.log",
+        
+        if self.MC_production == "MC15ri":
+            table_name = "_".join(
+                (
+                    "Rdtmc",
+                    table_id,
+                    charge,
+                    self.cut_type + "0-" + str(self.value)[-1],
+                    "all.log",
+                )
             )
-        )
+        elif self.MC_production == "MC15rd":
+            table_name = "_".join(
+                (
+                    "MC15rd",
+                    table_id,
+                    "all",
+                    self.cut_type + "0-" + str(self.value)[-1] + ".log",
+                )
+            )
+        return table_name
 
     def get_table(self, table_names):
 
         if self.particle_species in ["kaon", "pion"]:
             table = concat([read_csv(x) for x in table_names])
-            self.make_pidvar_compatible(table, max_uncertainty=10)
+            self.make_pidvar_compatible(self.MC_production, table, max_uncertainty=10)
 
         elif self.particle_species in ["elec", "muon"]:
             table = concat([read_csv(x) for x in table_names])
             table.query(self.get_lid_queries(), inplace=True)
 
+
         self.add_mcPDG_to_table(table)
+
 
         return table
 
@@ -957,7 +1014,7 @@ class CorrectionTableFinder:
 
     @staticmethod
     def make_pidvar_compatible(
-        table: DataFrame, max_uncertainty: Optional[float] = 1e2
+         MC_production: str, table: DataFrame, max_uncertainty: Optional[float] = 1e2
     ):
         """
         Convert the pandas dataframes obtained Hadron ID CSV tables via into a
@@ -983,16 +1040,17 @@ class CorrectionTableFinder:
         """
 
         # Some checks that table has expected format of Hadron ID tables
-        if not set(table["charge"]).issubset({1, -1}):
-            raise ValueError(
-                "Expected that the ``charge`` entries of the original Hadron ID dataframe consists"
-                + "only of ``1`` and ``-1``, but it contains {}".format(
-                    set(table["charge"])
+        if MC_production == "MC15ri":
+            if not set(table["charge"]).issubset({1, -1}):
+                raise ValueError(
+                    "Expected that the ``charge`` entries of the original Hadron ID dataframe consists"
+                    + "only of ``1`` and ``-1``, but it contains {}".format(
+                        set(table["charge"])
+                    )
                 )
-            )
 
-        if "theta_min" in table or "theta_max" in table:
-            raise ValueError("Dataframe already has ``theta_…`` columns")
+        # if "theta_min" in table or "theta_max" in table:
+        #     raise ValueError("Dataframe already has ``theta_…`` columns")
 
         if max_uncertainty is not None:
             unc_cols = [
@@ -1005,11 +1063,18 @@ class CorrectionTableFinder:
             # for θ in [0, π], cos(θ) is strictly decreasing, so we have invert min and max when inverting the cosine
         table["theta_min"] = -9999
         table["theta_max"] = -9999
-        table.loc[:, "theta_min"] = np.arccos(table["cos_max"].copy(deep=True))
-        table.loc[:, "theta_max"] = np.arccos(table["cos_min"].copy(deep=True))
+
+        if MC_production == "MC15ri":
+            table.loc[:, "theta_min"] = np.arccos(table["cos_max"].copy(deep=True))
+            table.loc[:, "theta_max"] = np.arccos(table["cos_min"].copy(deep=True))
+        elif MC_production == "MC15rd":
+            pass
 
         # PIDvar expects charge columns to contain + or -
-        table.loc[:, "charge"] = np.where(table["charge"] == +1, "+", "-")
+        if MC_production == "MC15ri":
+            table.loc[:, "charge"] = np.where(table["charge"] == +1, "+", "-")
+        elif MC_production == "MC15rd":
+            table.loc[:, "charge"] = np.where(table["charge_min"] == -2, "-", "+")
 
         return table
 
