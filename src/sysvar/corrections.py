@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import cached_property
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, InitVar
 from typing import List, Iterable, Optional
 from os import path
 
@@ -50,22 +50,7 @@ class NotValidRateType(Exception):
 
 @dataclass()
 class BaseCorrection(ABC, SavableAttributesObject):
-    systematic: str = None
-    MC_production: str = None
     uncertainties: dict = field(default_factory=dict)
-
-    def __post_init__(self):
-
-        super().__init__()
-        try:
-            self.info = read_yaml(self.systematic, self.MC_production)
-        except TypeError:
-            raise MissingInformationError(
-                "Need to specify the systematic effect and the MC production in the positional arguments"
-            )
-
-        self.visualizer = None
-        self.title = self.info["title"]
 
     @property
     @abstractmethod
@@ -114,37 +99,6 @@ class BaseCorrection(ABC, SavableAttributesObject):
             column_name = "_".join([prefix, variable])
 
         return column_name
-
-    def add_extra_cuts(self, queries: str, prefix: str) -> str:
-        if self._get_extra_cut_info() is not None:
-            # Add the prefix to the extra cut info
-            for var, values in self._get_extra_cut_info().items():
-                extra_cut = self._build_column_name(prefix, f"{var} in {values}")
-                queries = self._extend_queries_with_extra_cut(queries, extra_cut)
-
-            return queries
-        else:
-            return queries
-
-    @staticmethod
-    def _extend_queries_with_extra_cut(queries: list, extra_cut: str) -> list:
-        """Extends a list of queries by appending an extra condition to each query.
-
-        Args:
-            queries (list): A list of query strings.
-            extra_cut (str): An additional condition to be appended to each query.
-
-        Returns:
-            list: A new list of query strings with the extra condition appended.
-
-        Example:
-            >>> _extend_queries_with_extra_cut(['query1', 'query2'], 'extra_condition')
-            ['query1 & extra_condition', 'query2 & extra_condition']
-        """
-        return [" & ".join([q, extra_cut]) for q in queries]
-
-    def _get_extra_cut_info(self):
-        return self.info["extra_cuts"]
 
     @property
     def N(self) -> int:
@@ -216,8 +170,58 @@ class BaseCorrection(ABC, SavableAttributesObject):
             self.visualizer.plot_cov_and_corr(save=save, filename=filename)
 
 
+@dataclass()
+class BaseCorrectionFromYaml(BaseCorrection):
+    systematic: str = None
+    MC_production: str = None
+
+    def __post_init__(self):
+
+        super().__init__()
+        try:
+            self.info = read_yaml(self.systematic, self.MC_production)
+        except TypeError:
+            raise MissingInformationError(
+                f"Need to specify the systematic effect and the MC production in the positional arguments. You passed {self.systematic} and {self.MC_production}"
+            )
+
+        self.visualizer = None
+        self.title = self.info["title"]
+
+    def add_extra_cuts(self, queries: str, prefix: str) -> str:
+        if self._get_extra_cut_info() is not None:
+            # Add the prefix to the extra cut info
+            for var, values in self._get_extra_cut_info().items():
+                extra_cut = self._build_column_name(prefix, f"{var} in {values}")
+                queries = self._extend_queries_with_extra_cut(queries, extra_cut)
+
+            return queries
+        else:
+            return queries
+
+    @staticmethod
+    def _extend_queries_with_extra_cut(queries: list, extra_cut: str) -> list:
+        """Extends a list of queries by appending an extra condition to each query.
+
+        Args:
+            queries (list): A list of query strings.
+            extra_cut (str): An additional condition to be appended to each query.
+
+        Returns:
+            list: A new list of query strings with the extra condition appended.
+
+        Example:
+            >>> _extend_queries_with_extra_cut(['query1', 'query2'], 'extra_condition')
+            ['query1 & extra_condition', 'query2 & extra_condition']
+        """
+        return [" & ".join([q, extra_cut]) for q in queries]
+
+    def _get_extra_cut_info(self):
+        return self.info["extra_cuts"]
+
+
 @dataclass
-class Correction1D(BaseCorrection):
+class Correction1D(BaseCorrectionFromYaml):
 
     dependant_variable: str | None = None
     central_values: Iterable = None
@@ -265,7 +269,7 @@ class Correction1D(BaseCorrection):
 
 
 @dataclass
-class Correction2D(BaseCorrection):
+class Correction2D(BaseCorrectionFromYaml):
 
     uncertainties: dict = field(default_factory=dict)
 
@@ -385,7 +389,7 @@ class Correction2D(BaseCorrection):
 
 
 @dataclass
-class Correction2DCategorical(BaseCorrection):
+class Correction2DCategorical(BaseCorrectionFromYaml):
 
     categorical_variable: str | None = None
     continuus_variable: str | None = None
@@ -434,7 +438,7 @@ class Correction2DCategorical(BaseCorrection):
 
 
 @dataclass
-class CorrectionBF(BaseCorrection):
+class CorrectionBF(BaseCorrectionFromYaml):
 
     dependant_variable: str | None = None
     central_values: Iterable = None
@@ -531,7 +535,49 @@ class CorrectionBF(BaseCorrection):
 
 
 @dataclass
-class CorrectionPID(BaseCorrection):
+class CustomCorrection(BaseCorrection):
+
+    info: InitVar[dict] = None
+    dependant_variable: str | None = None
+    central_values: Iterable = None
+    uncertainties: dict = field(default_factory=dict)
+    query_targets: Iterable = None
+
+    def __post_init__(self, info):
+        self.info = info
+
+        self.dependant_variable = self.info["dependant_variable"]
+        self.central_values = self.info["central_values"]
+        self.query_targets = self.info["query_targets"]
+
+        self.unit = self.info["unit"]
+        self.title = self.info["title"]
+
+        self.populate_uncertainties()
+
+    @property
+    def value_edges(self) -> np.ndarray:
+        return np.arange(len(self.central_values) + 1)
+
+    @property
+    def value_mids(self) -> np.ndarray:
+        return (self.value_edges[1:] + self.value_edges[:-1]) / 2
+
+    @property
+    def visual_labels(self) -> List[str]:
+        return [
+            f"{self.dependant_variable} = {target}" for target in self.query_targets
+        ]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+
+        column_name = self._build_column_name(prefix, self.dependant_variable)
+        queries = [f"{column_name} == {target}" for target in self.query_targets]
+        return queries
+
+
+@dataclass
+class CorrectionPID(BaseCorrectionFromYaml):
 
     uncertainties: dict = field(default_factory=dict)
 
@@ -724,13 +770,23 @@ def create_correction_object(syst_effect: str, MC_prod: str) -> BaseCorrection:
         "PID": CorrectionPID,
     }
 
-    corr_type = read_yaml(syst_effect, MC_prod)["correction_type"]
+    if isinstance(syst_effect, str):
+        corr_type = read_yaml(syst_effect, MC_prod)["correction_type"]
 
-    try:
-        return correction_types[corr_type](syst_effect, MC_prod)
-    except KeyError:
-        raise NotImplementedError(
-            f"Available corrections are: {list(correction_types.keys())} but you passed {corr_type}"
+        try:
+            return correction_types[corr_type](
+                systematic=syst_effect, MC_production=MC_prod
+            )
+        except KeyError:
+            raise NotImplementedError(
+                f"Available corrections are: {list(correction_types.keys())} but you passed {corr_type}"
+            )
+    elif isinstance(syst_effect, dict):
+        return CustomCorrection(info=syst_effect)
+
+    else:
+        raise ValueError(
+            "Pass a string for existing standard systematic to create a correction object from yaml files or a dictionary to create a custom correction object"
         )
 
 
