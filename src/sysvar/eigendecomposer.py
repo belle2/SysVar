@@ -34,7 +34,10 @@ class EigenDecomposer(SavableAttributesObject):
 
         self.df = df
         self.settings = settings
-        self.syst_effect = syst_effect
+        if isinstance(syst_effect, dict):
+            self.syst_effect = syst_effect["name"]
+        else:
+            self.syst_effect = syst_effect
 
         if syst_effect is not None:
             self.correction = create_correction_object(syst_effect, settings["MC_prod"])
