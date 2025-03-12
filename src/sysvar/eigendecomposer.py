@@ -432,7 +432,7 @@ class EigenDecomposer(SavableAttributesObject):
         filepath = self.settings["output_filepath"] if filepath is None else filepath
         with uproot.recreate(filepath, compression=None) as newfile:
             logging.info(
-                "Recreate file with uproot: %s", self.settings["output_filepath"]
+                "Recreate file with uproot: %s", filepath
             )
 
             previous_tree = None
@@ -539,6 +539,98 @@ class EigenDecomposer(SavableAttributesObject):
                 index += t.Nbins
 
                 previous_tree = tree
+
+    def save_toys(self, filepath=None):
+
+        # Override the global filepath in case we want to run on a batch with b2luigi
+        filepath = self.settings["output_toy_filepath"] if filepath is None else filepath
+        with uproot.update(filepath) as newfile:
+            logging.info(
+                "Updating file with uproot: %s", self.settings["output_toy_filepath"]
+            )
+
+            previous_tree = None
+
+            index = 0
+            for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
+                self.enumerated_iterator, self.templates
+            ):
+
+                if tree != previous_tree:
+                    logging.info(50 * "#")
+                    logging.info("########## Reco channel: %s ##########", str(tree[1]))
+                    logging.info(50 * "#")
+
+
+                for n_var in range(self.settings["Nvar"]):
+
+                    toy = t.make_hist(n_var)
+
+                    branch_name = self._get_TBranch_name(
+                        tree[1], ctgy, f"{self.syst_effect}_toy{n_var+1}"
+                    )
+                    logging.info(
+                        "Saving toy %d of MC template %s in TBranch: %s",
+                        n_var,
+                        str(ctgy),
+                        branch_name,
+                    )
+
+                    newfile[branch_name] = toy[0], toy[1]
+
+
+                previous_tree = tree
+
+    def save_one_sigma_variations(self, filepath=None):
+
+            # Override the global filepath in case we want to run on a batch with b2luigi
+            filepath = self.settings["output_extreme_filepath"] if filepath is None else filepath
+            with uproot.update(filepath) as newfile:
+                logging.info(
+                    "Updating file with uproot: %s", self.settings["output_extreme_filepath"]
+                )
+
+                previous_tree = None
+
+                index = 0
+                for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
+                    self.enumerated_iterator, self.templates
+                ):
+
+                    if tree != previous_tree:
+                        logging.info(50 * "#")
+                        logging.info("########## Reco channel: %s ##########", str(tree[1]))
+                        logging.info(50 * "#")
+
+
+                    for var in ["up", "down"]:
+
+                        variation = t.make_hist(var)
+
+                        branch_name = self._get_TBranch_name(
+                            tree[1], ctgy, f"{self.syst_effect}_{var}"
+                        )
+                        logging.info(
+                            "Saving one sigma variation %s of MC template %s in TBranch: %s",
+                            var,
+                            str(ctgy),
+                            branch_name,
+                        )
+
+                        newfile[branch_name] = variation[0], variation[1]
+
+                        filedir = f"{tree[1]}/Data/{self.syst_effect}_{var}"
+
+                        logging.info(
+                            "Adding empty observed Data for region: %s in %s",
+                            tree[1],
+                            filedir,
+                        )
+                        # Save empty data now as we work only on Asimov
+                        newfile[filedir] = np.array([0, 0, 0]), np.array([0, 1, 2, 3])
+
+
+                    previous_tree = tree
 
     def plot_cov_diff(self, save: bool = False, filename: str = ""):
 
