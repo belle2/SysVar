@@ -125,7 +125,11 @@ class EigenDecomposer(SavableAttributesObject):
 
     @property
     def template_names(self) -> list:
-        return [template_name for template_name in self.settings["templates"]]
+
+        if self.syst_effect is not None and self.settings["systematics"][self.syst_effect]["templates"] is not None:
+            return [template_name for template_name in self.settings["systematics"][self.syst_effect]["templates"]]
+        else:
+            return [template_name for template_name in self.settings["templates"]]
 
     @property
     def Nbins(self) -> int:
