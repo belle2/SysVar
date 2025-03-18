@@ -1117,12 +1117,13 @@ class CorrectionTableFinder:
             ]
             # table = table[table[unc_cols].max(axis=1) <= max_uncertainty]
             # for θ in [0, π], cos(θ) is strictly decreasing, so we have invert min and max when inverting the cosine
-        table["theta_min"] = -9999
-        table["theta_max"] = -9999
 
         if MC_production == "MC15ri":
+            table["theta_min"] = -9999
+            table["theta_max"] = -9999
             table.loc[:, "theta_min"] = np.arccos(table["cos_max"].copy(deep=True))
             table.loc[:, "theta_max"] = np.arccos(table["cos_min"].copy(deep=True))
+            
         elif MC_production == "MC15rd":
             pass
 
