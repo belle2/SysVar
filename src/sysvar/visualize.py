@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from sysvar.variations import Variator
     from sysvar.templates import Template
     from sysvar.eigendecomposer import EigenDecomposer
+    from sysvar.ff_models import FFModel
 
 from os import path, makedirs
 import math
@@ -776,15 +777,7 @@ class TemplateVisualizer(Visualizer):
 
 
 class FFModelVisualizer(Visualizer):
-    def __init__(
-        self,
-        instance: Template,
-        namespace: list,
-        top_dir: str,
-        dir_spec: str | None = None,
-        extra_ext: str | Iterable | None = None,
-        save: bool = False,
-    ):
+    def __init__(self, instance: FFModel):
         super().__init__(instance)
 
     def annotate_matrix_plot(self, ax: Axes):
@@ -809,7 +802,9 @@ class FFModelVisualizer(Visualizer):
             self.instance.params.keys(),
         )
 
-    def plot_cov_matrix(self, ax: Axes | None = None):
+    def plot_cov_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
@@ -824,9 +819,15 @@ class FFModelVisualizer(Visualizer):
         ax.set_title("Covariance matrix")
         self.annotate_matrix_plot(ax)
 
+        if save:
+            self.instance.saving_info["namespace"] = ["ff_model", "cov_matrix"]
+            self.save_figure(fig, filename)
+
         return ax
 
-    def plot_corr_matrix(self, ax: Axes | None = None):
+    def plot_corr_matrix(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
@@ -853,10 +854,15 @@ class FFModelVisualizer(Visualizer):
                 )
             )
         )
+        if save:
+            self.instance.saving_info["namespace"] = ["ff_model", "corr_matrix"]
+            self.save_figure(fig, filename)
 
         return ax
 
-    def plot_params(self, ax: Axes | None = None):
+    def plot_params(
+        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+    ):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
@@ -891,9 +897,13 @@ class FFModelVisualizer(Visualizer):
         ax.set_ylabel("Value")
         # ax.set_title("Model parameter values")
 
+        if save:
+            self.instance.saving_info["namespace"] = ["ff_model", "params"]
+            self.save_figure(fig, filename)
+
         return ax
 
-    def plot_corr_and_params(self):
+    def plot_corr_and_params(self, save: bool = False, filename: str = ""):
 
         fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=DPI)
 
@@ -901,6 +911,12 @@ class FFModelVisualizer(Visualizer):
 
         self.plot_corr_matrix(ax[1])
         self.annotate_matrix_plot(ax[1])
+        if save:
+            self.instance.saving_info["namespace"] = [
+                "ff_model",
+                "corr_matrix_and_params",
+            ]
+            self.save_figure(fig, filename)
 
         return fig, ax
 
