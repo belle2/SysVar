@@ -193,13 +193,30 @@ class Template(ABC, SavableAttributesObject):
                 self.correction.PDG,
                 self.correction.mcPDG,
             ]
+        elif isinstance(self.correction, CustomCorrection):
+            variables = [
+                self.syst_weight,
+                self.correction.dependant_variable,
+            ]
         elif self.correction is None:
-            variables = []
+            raise TypeError(
+                f"The correction is None. Please provide a valid correction"
+            )
+        else:
+            raise TypeError(
+                f"Type {type(self.correction)} not recognized. Please use Correction1D, CorrectionBF, Correction2D or CorrectionPID, CustomCorrection"
+            )
 
-        # Construct the column names
-        for prefix in prefices:
+        if len(prefices) > 0:
+            # Construct the column names
+            for prefix in prefices:
+                for var in variables:
+                    columns.append(self.correction._build_column_name(prefix, var))
+        else:
             for var in variables:
-                columns.append(self.correction._build_column_name(prefix, var))
+                columns.append(
+                    self.correction._build_column_name(prefix=None, variable=var)
+                )
 
         return columns
 
@@ -215,15 +232,22 @@ class Template(ABC, SavableAttributesObject):
         elif isinstance(self.prefices, list):
             # For multuple columns we need to loop over all the prefices.
             # Assumes that all the weights have the same name
-            for prefix in self.prefices:
-                # Now build the weightname
+            if len(self.prefices) > 0:
+                for prefix in self.prefices:
+                    # Now build the weightname
+                    weightname = self.correction._build_column_name(
+                        prefix, self.syst_weight
+                    )
+                    # And initialize and add all the variations
+                    self._initialize_variations(weightname)
+                    self._add_variations_to_df(weightname, prefix)
+            else:
                 weightname = self.correction._build_column_name(
-                    prefix, self.syst_weight
+                    prefix=None, variable=self.syst_weight
                 )
-
                 # And initialize and add all the variations
                 self._initialize_variations(weightname)
-                self._add_variations_to_df(weightname, prefix)
+                self._add_variations_to_df(weightname)
 
         else:
             raise ValueError(
@@ -368,14 +392,7 @@ class Template(ABC, SavableAttributesObject):
                     * self.df[f"{weightname}_var_{index}"]
                 )
 
-            elif self.prefices is None:
-                weightname = self.syst_weight
-                weights = np.array(
-                    (self.df[self.total_weight] / self.df[weightname].replace(0, 1))
-                    * self.df[f"{weightname}_var_{index}"]
-                )
-
-            elif isinstance(self.prefices, list):
+            elif isinstance(self.prefices, list) and len(self.prefices) > 0:
                 # If we have multiple prefices we need to to create all the column names first
                 weightnames = [
                     "_".join([prefix, self.syst_weight]) for prefix in self.prefices
@@ -386,6 +403,13 @@ class Template(ABC, SavableAttributesObject):
                     self.df[self.total_weight]
                     / self.df[weightnames].replace(0, 1).prod(axis=1)
                     * self.df[[f"{w}_var_{index}" for w in weightnames]].prod(axis=1)
+                )
+
+            elif self.prefices is None or len(self.prefices) == 0:
+                weightname = self.syst_weight
+                weights = np.array(
+                    (self.df[self.total_weight] / self.df[weightname].replace(0, 1))
+                    * self.df[f"{weightname}_var_{index}"]
                 )
 
             else:

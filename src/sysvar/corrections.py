@@ -574,7 +574,7 @@ class CustomCorrection(BaseCorrection):
     def build_queries(self, prefix: str | None = None) -> list:
 
         column_name = self._build_column_name(prefix, self.dependant_variable)
-        queries = [f"{column_name} == {target}" for target in self.query_targets]
+        queries = [f"{column_name} == '{target}'" for target in self.query_targets]
         return queries
 
 
