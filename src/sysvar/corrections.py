@@ -635,13 +635,33 @@ class CorrectionPID(BaseCorrectionFromYaml):
 
         table_finders = []
         if "eID" in self.systematic:
-            table_finders.append(
-                CorrectionTableFinder.electrons(self.info, self.MC_production)
-            )
-        if "muID" in self.systematic:
-            table_finders.append(
-                CorrectionTableFinder.muons(self.info, self.MC_production)
-            )
+            if self.systematic == "eID_K_fake":
+                table_finders.append(
+                    CorrectionTableFinder.Kfake_electrons(self.info, self.MC_production)
+                )
+            elif self.systematic == "eID_pi_fake":
+                table_finders.append(
+                    CorrectionTableFinder.pifake_electrons(
+                        self.info, self.MC_production
+                    )
+                )
+            else:
+                table_finders.append(
+                    CorrectionTableFinder.electrons(self.info, self.MC_production)
+                )
+        elif "muID" in self.systematic:
+            if self.systematic == "muID_K_fake":
+                table_finders.append(
+                    CorrectionTableFinder.Kfake_muons(self.info, self.MC_production)
+                )
+            elif self.systematic == "muID_pi_fake":
+                table_finders.append(
+                    CorrectionTableFinder.pifake_muons(self.info, self.MC_production)
+                )
+            else:
+                table_finders.append(
+                    CorrectionTableFinder.muons(self.info, self.MC_production)
+                )
         elif "kID" in self.systematic:
             table_finders.append(
                 CorrectionTableFinder.kaons(self.info, self.MC_production)
@@ -872,9 +892,61 @@ class CorrectionTableFinder:
         )
 
     @classmethod
+    def Kfake_electrons(cls, external_info, MC_production):
+
+        particle_species = "Kfake_elec"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable=external_info["variable"],
+            MC_production=MC_production,
+        )
+
+    @classmethod
+    def pifake_electrons(cls, external_info, MC_production):
+
+        particle_species = "pifake_elec"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable=external_info["variable"],
+            MC_production=MC_production,
+        )
+
+    @classmethod
     def muons(cls, external_info, MC_production):
 
         particle_species = "muon"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable=external_info["variable"],
+            MC_production=MC_production,
+        )
+
+    @classmethod
+    def Kfake_muons(cls, external_info, MC_production):
+
+        particle_species = "Kfake_muon"
+
+        return cls(
+            particle_species=particle_species,
+            online_cut=external_info["online_cut"],
+            base_table_path=external_info["table_paths"],
+            variable=external_info["variable"],
+            MC_production=MC_production,
+        )
+
+    @classmethod
+    def pifake_muons(cls, external_info, MC_production):
+
+        particle_species = "pifake_muon"
 
         return cls(
             particle_species=particle_species,
@@ -938,6 +1010,24 @@ class CorrectionTableFinder:
                         "pi_e_fakeRate",
                     ],
                 },
+                "Kfake_elec": {
+                    "true_pdgs": [11, -11],
+                    "fake_pdgs": [
+                        321,
+                        -321,
+                    ],
+                    "eff_table_ids": ["e_efficiency"],
+                    "fake_rate_table_ids": ["K_e_fakeRate"],
+                },
+                "pifake_elec": {
+                    "true_pdgs": [11, -11],
+                    "fake_pdgs": [
+                        211,
+                        -211,
+                    ],
+                    "eff_table_ids": ["e_efficiency"],
+                    "fake_rate_table_ids": ["pi_e_fakeRate"],
+                },
                 "muon": {
                     "true_pdgs": [13, -13],
                     "fake_pdgs": [321, 211, -321, -211],
@@ -946,6 +1036,21 @@ class CorrectionTableFinder:
                         "K_mu_fakeRate",
                         "pi_mu_fakeRate",
                     ],
+                },
+                "Kfake_muon": {
+                    "true_pdgs": [13, -13],
+                    "fake_pdgs": [321, -321],
+                    "eff_table_ids": ["mu_efficiency"],
+                    "fake_rate_table_ids": ["K_mu_fakeRate"],
+                },
+                "pifake_muon": {
+                    "true_pdgs": [13, -13],
+                    "fake_pdgs": [
+                        211,
+                        -211,
+                    ],
+                    "eff_table_ids": ["mu_efficiency"],
+                    "fake_rate_table_ids": ["pi_mu_fakeRate"],
                 },
             }
         return self._particle_species_settings
@@ -965,7 +1070,7 @@ class CorrectionTableFinder:
         # TODO update this to the config file of each experiment to avoid making the mistake of
         # changing the value during the offline preproccesing
 
-        if self.particle_species in ["muon", "elec"]:
+        if "elec" in self.particle_species or "muon" in self.particle_species:
             cut_type = self.online_cut
 
         elif self.particle_species in ["kaon", "pion"]:
@@ -1023,7 +1128,8 @@ class CorrectionTableFinder:
             # Now add thhe names for negative charge
             file_names.extend([self.build_hid_table_name(x, "m") for x in table_ids])
 
-        elif self.particle_species in ["elec", "muon"]:
+        # elif self.particle_species in ["elec", "muon"]:
+        elif "elec" in self.particle_species or "muon" in self.particle_species:
             file_names = ["_".join((x, "table.csv")) for x in table_ids]
 
         return [path.join(self.base_table_path, x) for x in file_names]
@@ -1057,7 +1163,8 @@ class CorrectionTableFinder:
             table = concat([read_csv(x) for x in table_names])
             self.make_pidvar_compatible(self.MC_production, table, max_uncertainty=10)
 
-        elif self.particle_species in ["elec", "muon"]:
+        elif "elec" in self.particle_species or "muon" in self.particle_species:
+            # elif self.particle_species in ["elec", "muon"]:
             table = concat([read_csv(x) for x in table_names])
             table.query(self.get_lid_queries(), inplace=True)
 
@@ -1145,10 +1252,10 @@ class CorrectionTableFinder:
 
         best_available = "(is_best_available == True)"
 
-        if self.particle_species == "elec":
+        if "elec" in self.particle_species:
             exclude_bins = "(not ((theta_min == 0.56 and theta_max == 2.23) or (theta_min == 0.22 and theta_max == 2.71) or (p_min == 0.2 and p_max == 7) or (p_min == 0.2 and p_max == 5)))"
 
-        elif self.particle_species == "muon":
+        elif "muon" in self.particle_species:
 
             exclude_bins = "(not ((theta_min == 0.82 and theta_max == 2.22) or (theta_min == 0.4 and theta_max == 0.82) or (theta_min == 0.4 and theta_max == 2.6) or (p_min == 0.2 and p_max == 5)))"
 
