@@ -90,6 +90,7 @@ def eigendecompose(
     criterion: str = "max_differences",
     prc: float = 1e-4,
     save_variations: bool = False,
+    save_channel_covariance_matrices: bool = False,
 ):
     """
     Performs eigendecomposition on the input DataFrame based on specified settings,
@@ -113,12 +114,13 @@ def eigendecompose(
     """
 
     egd = EigenDecomposer(df, settings, syst_effect)
-
     egd.precision = prc
     egd.find_important_eigendimension_indices(criterion)
 
     if save_variations:
         egd.save_template_variations()
+    if save_channel_covariance_matrices:
+        egd.save_channel_covariance_matrices()
 
     return egd
 
