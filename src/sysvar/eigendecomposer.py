@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from os import path
 import itertools
 from functools import cached_property
 from typing import List
@@ -126,8 +127,16 @@ class EigenDecomposer(SavableAttributesObject):
     @property
     def template_names(self) -> list:
 
-        if self.syst_effect is not None and self.settings["systematics"][self.syst_effect]["templates"] is not None:
-            return [template_name for template_name in self.settings["systematics"][self.syst_effect]["templates"]]
+        if (
+            self.syst_effect is not None
+            and self.settings["systematics"][self.syst_effect]["templates"] is not None
+        ):
+            return [
+                template_name
+                for template_name in self.settings["systematics"][self.syst_effect][
+                    "templates"
+                ]
+            ]
         else:
             return [template_name for template_name in self.settings["templates"]]
 
@@ -435,9 +444,7 @@ class EigenDecomposer(SavableAttributesObject):
         # Override the global filepath in case we want to run on a batch with b2luigi
         filepath = self.settings["output_filepath"] if filepath is None else filepath
         with uproot.recreate(filepath, compression=None) as newfile:
-            logging.info(
-                "Recreate file with uproot: %s", filepath
-            )
+            logging.info("Recreate file with uproot: %s", filepath)
 
             previous_tree = None
 
@@ -547,7 +554,9 @@ class EigenDecomposer(SavableAttributesObject):
     def save_toys(self, filepath=None):
 
         # Override the global filepath in case we want to run on a batch with b2luigi
-        filepath = self.settings["output_toy_filepath"] if filepath is None else filepath
+        filepath = (
+            self.settings["output_toy_filepath"] if filepath is None else filepath
+        )
         with uproot.update(filepath) as newfile:
             logging.info(
                 "Updating file with uproot: %s", self.settings["output_toy_filepath"]
@@ -565,7 +574,6 @@ class EigenDecomposer(SavableAttributesObject):
                     logging.info("########## Reco channel: %s ##########", str(tree[1]))
                     logging.info(50 * "#")
 
-
                 for n_var in range(self.settings["Nvar"]):
 
                     toy = t.make_hist(n_var)
@@ -582,59 +590,84 @@ class EigenDecomposer(SavableAttributesObject):
 
                     newfile[branch_name] = toy[0], toy[1]
 
-
                 previous_tree = tree
 
     def save_one_sigma_variations(self, filepath=None):
 
-            # Override the global filepath in case we want to run on a batch with b2luigi
-            filepath = self.settings["output_extreme_filepath"] if filepath is None else filepath
-            with uproot.update(filepath) as newfile:
-                logging.info(
-                    "Updating file with uproot: %s", self.settings["output_extreme_filepath"]
-                )
+        # Override the global filepath in case we want to run on a batch with b2luigi
+        filepath = (
+            self.settings["output_extreme_filepath"] if filepath is None else filepath
+        )
+        with uproot.update(filepath) as newfile:
+            logging.info(
+                "Updating file with uproot: %s",
+                self.settings["output_extreme_filepath"],
+            )
 
-                previous_tree = None
+            previous_tree = None
 
-                index = 0
-                for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
-                    self.enumerated_iterator, self.templates
-                ):
+            index = 0
+            for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
+                self.enumerated_iterator, self.templates
+            ):
 
-                    if tree != previous_tree:
-                        logging.info(50 * "#")
-                        logging.info("########## Reco channel: %s ##########", str(tree[1]))
-                        logging.info(50 * "#")
+                if tree != previous_tree:
+                    logging.info(50 * "#")
+                    logging.info("########## Reco channel: %s ##########", str(tree[1]))
+                    logging.info(50 * "#")
 
+                for var in ["up", "down"]:
 
-                    for var in ["up", "down"]:
+                    variation = t.make_hist(var)
 
-                        variation = t.make_hist(var)
+                    branch_name = self._get_TBranch_name(
+                        tree[1], ctgy, f"{self.syst_effect}_{var}"
+                    )
+                    logging.info(
+                        "Saving one sigma variation %s of MC template %s in TBranch: %s",
+                        var,
+                        str(ctgy),
+                        branch_name,
+                    )
 
-                        branch_name = self._get_TBranch_name(
-                            tree[1], ctgy, f"{self.syst_effect}_{var}"
-                        )
-                        logging.info(
-                            "Saving one sigma variation %s of MC template %s in TBranch: %s",
-                            var,
-                            str(ctgy),
-                            branch_name,
-                        )
+                    newfile[branch_name] = variation[0], variation[1]
 
-                        newfile[branch_name] = variation[0], variation[1]
+                    filedir = f"{tree[1]}/Data/{self.syst_effect}_{var}"
 
-                        filedir = f"{tree[1]}/Data/{self.syst_effect}_{var}"
+                    logging.info(
+                        "Adding empty observed Data for region: %s in %s",
+                        tree[1],
+                        filedir,
+                    )
+                    # Save empty data now as we work only on Asimov
+                    newfile[filedir] = np.array([0, 0, 0]), np.array([0, 1, 2, 3])
 
-                        logging.info(
-                            "Adding empty observed Data for region: %s in %s",
-                            tree[1],
-                            filedir,
-                        )
-                        # Save empty data now as we work only on Asimov
-                        newfile[filedir] = np.array([0, 0, 0]), np.array([0, 1, 2, 3])
+                previous_tree = tree
 
+    def save_channel_covariance_matrices(self, filepath=None):
 
-                    previous_tree = tree
+        # PATCH so this is the general output file of the analysis
+        filepath = self.settings["output_filepath"] if filepath is None else filepath
+        # extract its topdir
+        base_path = path.dirname(filepath)
+        # Loop over all the channels
+        for i, dm in enumerate(self.decay_modes):
+            logging.info("########## Reco channel: %s ##########", str(dm[1]))
+            # Loop over all the templates
+            for j, t in enumerate(self.template_names):
+                # extract the template index as all of them are a big list
+                template_index = len(self.template_names) * i + (j)
+                tmp_template = self.templates[template_index]
+                # If this is the first templates initialize an emtpy cov matrix
+                if j == 0:
+                    cov = np.zeros((tmp_template.Nbins, tmp_template.Nbins))
+                # Now add the template cov matrix
+                cov += tmp_template.cov_matrix
+
+            # Once we have looped over all the templates then save the cov matrix for this channel
+            outpath = base_path + f"/{dm[1]}_{self.syst_effect}_cov.npy"
+            logging.info("Save covariance matrix at %s ##########", str(outpath))
+            np.save(outpath, cov)
 
     def plot_cov_diff(self, save: bool = False, filename: str = ""):
 
