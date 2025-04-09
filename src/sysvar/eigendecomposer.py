@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from os import path
+from os import path, makedirs
 import itertools
 from functools import cached_property
 from typing import List
@@ -665,7 +665,14 @@ class EigenDecomposer(SavableAttributesObject):
                 cov += tmp_template.cov_matrix
 
             # Once we have looped over all the templates then save the cov matrix for this channel
-            outpath = base_path + f"/{dm[1]}_{self.syst_effect}_cov.npy"
+
+            cov_path_dir = path.join(base_path, f"cov_matrices")
+            # check if the covariance directory exists
+            if not path.exists(cov_path_dir):
+                # if not create it
+                makedirs(cov_path_dir)
+
+            outpath = path.join(cov_path_dir, f"{dm[1]}_{self.syst_effect}_cov.npy")
             logging.info("Save covariance matrix at %s ##########", str(outpath))
             np.save(outpath, cov)
 
