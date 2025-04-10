@@ -495,7 +495,7 @@ class CorrectionBF(BaseCorrectionFromYaml):
         corrections = np.divide(
             pdg_BFs,
             decaydec_BFs,
-            out=unp.uarray(np.ones_like(pdg_BFs), np.zeros_like(pdg_BFs)),
+            out=unp.uarray(np.ones_like(pdg_BFs), np.ones_like(pdg_BFs)),
             where=((decaydec_BFs != 0) & (pdg_BFs != 0)),
         )
 
