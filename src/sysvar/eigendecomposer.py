@@ -206,7 +206,7 @@ class EigenDecomposer(SavableAttributesObject):
         total_N_vectors = len(self.eigen_vectors)
         max_differences = []
         logging.warn(
-            "Only the first 50 eigendirections will be considered to find the maximum number of eigenvariations. This is an arbitrary choice as it's highly unlikely that an analysis will use > 50 nuisance parameters for only one systematic source."
+            "Only the first 100 eigendirections will be considered to find the maximum number of eigenvariations. This is an arbitrary choice as it's highly unlikely that an analysis will use > 100 nuisance parameters for only one systematic source."
         )
         for n_vectors in tqdm(range(total_N_vectors)):
 
@@ -220,7 +220,7 @@ class EigenDecomposer(SavableAttributesObject):
             # Calculate only the first 50 eigendirections to save time
             # It's highly unlikely that an analysis will use > 50 nuisance parameters
             # for one systematic only
-            if n_vectors > 49:
+            if n_vectors > 99:
                 break
 
         return max_differences
