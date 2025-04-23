@@ -13,7 +13,7 @@ def get_uncertainty_types():
     return {
         "fully_correlated": FullyCorrelatedUncertainty,
         "uncorrelated": UncorrelatedUncertainty,
-        "correlated": CorrelatedUncertainty,
+        "explicitly_correlated": ExplicitlyCorrelatedUncertainty,
         "fully_correlated_in_parts": FullyCorrelatedUncertaintyInParts,
     }
 
@@ -254,7 +254,7 @@ class UncorrelatedUncertainty(Uncertainty):
         return np.diag(self.errors * self.errors)
 
 
-class CorrelatedUncertainty(Uncertainty):
+class ExplicitlyCorrelatedUncertainty(Uncertainty):
     def __init__(self):
 
         raise NotImplementedError(

@@ -507,17 +507,32 @@ class CorrectionBF(BaseCorrectionFromYaml):
 
         """
 
-        # Add the uncertainties as fully uncorrelated. This is a choice.
-        # Can be very complicated as some of these modes may have been measured
-        # by the same experiments, with complicated correlatiosn
-        unc_type = "fully_correlated"
+        unc_correlation = self.get_uncertainty_correlation()
 
         sysvar_uncertainties = get_uncertainty_types()
         self.add_uncertainty(
             unc_name="BF_unc",
             unc_values=error_amplitudes,
-            unc_obj=sysvar_uncertainties[unc_type],
+            unc_obj=sysvar_uncertainties[unc_correlation],
         )
+
+    def get_uncertainty_correlation(self):
+        if self.info["correlation"] in [
+            "fully_correlated",
+            "uncorrelated",
+            "fully_correlated_in_parts",
+        ]:
+            unc_type = self.info["correlation"]
+        elif self.info["correlation"] == "explicitly_correlated":
+            raise NotImplementedError(
+                "Cannot support custom correlation for BF correction yet"
+            )
+        else:
+            raise ValueError(
+                "Unkown correlation type. Available types are: fully_correlated, uncorrelated, fully_correlated_in_parts"
+            )
+
+        return unc_type
 
     def build_queries(self, prefix: str | None = None) -> list:
 
