@@ -199,9 +199,10 @@ class Template(ABC, SavableAttributesObject):
                 self.correction.dependant_variable,
             ]
         elif self.correction is None:
-            raise TypeError(
-                f"The correction is None. Please provide a valid correction"
+            logging.warn(
+                "Correction object is None. If you're saving nominal templates this is ok"
             )
+            return list(set(columns))
         else:
             raise TypeError(
                 f"Type {type(self.correction)} not recognized. Please use Correction1D, CorrectionBF, Correction2D or CorrectionPID, CustomCorrection"
@@ -218,7 +219,8 @@ class Template(ABC, SavableAttributesObject):
                     self.correction._build_column_name(prefix=None, variable=var)
                 )
 
-        return columns
+        # Remove duplicate columns before we return it
+        return list(set(columns))
 
     def add_variations(self):
 

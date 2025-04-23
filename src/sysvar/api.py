@@ -10,6 +10,7 @@ from sysvar.variations import Variator
 from sysvar.corrections import create_correction_object
 from sysvar.eigendecomposer import EigenDecomposer
 from sysvar.visualize import CorrectionVisualizer, UncertaintyVisualizer
+from sysvar.covariance_calculator import CovarianceCalculator
 
 import logging
 
@@ -130,6 +131,38 @@ def save_nominal_templates(df: DataFrame, settings: Dict, data=None):
     # Create an eigendecomposer object without any systematic effect
     egd = EigenDecomposer(df=df, settings=settings, syst_effect=None)
     egd.save_nominal_templates(data=data)
+
+
+def calculate_covariance_matrix(
+    df: DataFrame,
+    settings: Dict,
+    syst_effect: str | Dict,
+    binning: Dict,
+    channels: List,
+    input_cov: np.ndarray = None,
+    save_cov: bool = False,
+):
+    """
+    Calculate the covariance matrix for a given dataset.
+
+    This function computes a covariance matrix based on the input data, configuration settings, and systematic effects. It provides support for pre-defined systematics or custom-defined ones and allows the user to specify binning and channels. Optionally, it can save the covariance matrix to a file.
+
+    Args:
+        df (DataFrame): The input data to calculate the covariance matrix from.
+        settings (Dict): Configuration settings, same as for the `EigenDecomposer`.
+        syst_effect (str | Dict): The name of the systematic effect to consider for the covariance matrix. For systematics from YAML files the name is enough. If this is a custom systematic then a dictionary with for the custom systematic is expected similarly to the dictionary necessary for the custom correction object in the eigendecomposition.
+        binning (Dict): Binning information for the covariance matrix. Keys should be the variable names present in the df and values lists of bin edges.
+        channels (List): List of channels to consider for the covariance matrix.
+        save_cov (bool, optional): If True, saves the covariance matrix. The path should be read from the settings dictionary. Defaults to False.
+
+    Returns:
+        the covariance matrix from the covariance matrix calculator
+    """
+
+    cc = CovarianceCalculator(df, settings, syst_effect, binning, channels, input_cov)
+    if save_cov:
+        cc.save_covariance()
+    return cc.cov
 
 
 def plot_analysis_corr_matrix(
