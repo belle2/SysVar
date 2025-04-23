@@ -202,28 +202,28 @@ class EigenDecomposer(SavableAttributesObject):
 
     @cached_property
     def max_differences(self) -> list:
-
-        total_N_vectors = len(self.eigen_vectors)
-        max_differences = []
-        logging.warn(
-            "Only the first 100 eigendirections will be considered to find the maximum number of eigenvariations. This is an arbitrary choice as it's highly unlikely that an analysis will use > 100 nuisance parameters for only one systematic source."
+        total_N = len(self.eigen_vectors)
+        max_n    = min(total_N, 100)  # only need the first 100
+        running_cov = np.zeros_like(self.cov)
+        max_diffs   = np.empty(max_n, dtype=float)
+    
+        logging.warning(
+            "Only the first %d eigendirections will be considered to find "
+            "the maximum number of eigenvariations.", max_n
         )
-        for n_vectors in tqdm(range(total_N_vectors)):
-
-            dimension_subset = self.eigen_variations[:, :n_vectors].T
-            subset_covariances = [self.var2cov(x) for x in dimension_subset]
-
-            max_differences.append(
-                np.abs(np.real(self.cov - np.sum(subset_covariances, axis=0))).max()
-            )
-
-            # Calculate only the first 50 eigendirections to save time
-            # It's highly unlikely that an analysis will use > 50 nuisance parameters
-            # for one systematic only
-            if n_vectors > 99:
-                break
-
-        return max_differences
+    
+        for i in tqdm(range(max_n), desc="Building partial covariances"):
+            # grab the i-th eigen-variation (shape: [n_features,])
+            vec = self.eigen_variations[:, i]
+    
+            # update the running sum
+            running_cov += self.var2cov(vec)
+    
+            # compute the max difference
+            diff = np.abs(np.real(self.cov - running_cov)).max()
+            max_diffs[i] = diff
+    
+        return max_diffs
 
     @staticmethod
     def var2cov(mat) -> np.ndarray:
