@@ -203,26 +203,27 @@ class EigenDecomposer(SavableAttributesObject):
     @cached_property
     def max_differences(self) -> list:
         total_N = len(self.eigen_vectors)
-        max_n    = min(total_N, 100)  # only need the first 100
+        max_n = min(total_N, 100)  # only need the first 100
         running_cov = np.zeros_like(self.cov)
-        max_diffs   = np.empty(max_n, dtype=float)
-    
+        max_diffs = np.empty(max_n, dtype=float)
+
         logging.warning(
             "Only the first %d eigendirections will be considered to find "
-            "the maximum number of eigenvariations.", max_n
+            "the maximum number of eigenvariations.",
+            max_n,
         )
-    
+
         for i in tqdm(range(max_n), desc="Building partial covariances"):
             # grab the i-th eigen-variation (shape: [n_features,])
             vec = self.eigen_variations[:, i]
-    
+
             # update the running sum
             running_cov += self.var2cov(vec)
-    
+
             # compute the max difference
             diff = np.abs(np.real(self.cov - running_cov)).max()
             max_diffs[i] = diff
-    
+
         return max_diffs
 
     @staticmethod
@@ -349,7 +350,11 @@ class EigenDecomposer(SavableAttributesObject):
                 f"Available methods are: max_differences and trace"
             )
 
-        self.N_important_dims = np.sum(important_dims)
+        # Increase number by one to get the last principal componenent
+        self.N_important_dims = np.sum(important_dims) + 1
+        # Set the index of the last principal component to True
+        important_dims[self.N_important_dims] = True
+        # Collect the indices of the important dimensions including the last one
         self.important_dims_indices = important_dims
         logging.info(
             f"Found that %s eigendirections matter for %s per cent precision",
