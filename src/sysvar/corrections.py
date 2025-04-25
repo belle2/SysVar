@@ -1276,4 +1276,16 @@ class CorrectionTableFinder:
 
         variable = f"(variable == '{self.variable}')"
 
-        return " and ".join((working_point, best_available, exclude_bins, variable))
+        # PATCH exclude negative and extremely large weights
+        physical_values = "(0 < data_MC_ratio < 10)"
+        logging.warning(
+            f"If negative weights or extremely large weights are present in the table, these will be excluded. The arbitrarily selected 'physical range' is {physical_values}"
+        )
+
+        total_cutstring = " and ".join(
+            (working_point, best_available, exclude_bins, variable, physical_values)
+        )
+        logging.info(
+            f"The following cutstring has been applied to the provide LID table: {total_cutstring}"
+        )
+        return total_cutstring
