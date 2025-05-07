@@ -3,7 +3,7 @@ from __future__ import annotations
 from os import path
 from pathlib import Path
 from yaml import safe_load
-from typing import List
+from typing import List, Optional
 import numpy as np
 
 from abc import ABC, abstractmethod
@@ -234,3 +234,46 @@ class SavableAttributesObject:
             >>> obj.register_saving_info({'attribute_name': 'save_path'})
         """
         self.saving_info = saving_info
+
+def load_covariance_matrix(
+    config: dict,
+    key_matrix: Optional[str] = None,
+    key_path: str = "cov_matrix_path",
+) -> Optional[np.ndarray]:
+    
+    """Load a covariance matrix from a configuration dictionary.
+
+    This function attempts to load a covariance matrix either directly from the
+    configuration using a specified key or from a file path (supporting `.npy` or CSV files).
+
+    Args:
+        config (dict): Configuration dictionary that may contain the covariance matrix
+            or a path to the matrix file.
+        key_matrix (Optional[str], optional): Key in the config dictionary where the
+            matrix might be directly stored. Defaults to None.
+        key_path (str, optional): Key in the config dictionary where the file path to the
+            covariance matrix is specified. Defaults to "cov_matrix_path".
+
+    Returns:
+        Optional[np.ndarray]: The loaded covariance matrix as a NumPy array if found,
+        otherwise None.
+    """
+    if key_matrix in config:
+        logging.info(f"Loading covariance matrix from config key: {key_matrix}")
+        return np.asarray(config[key_matrix])
+
+    elif key_path in config:
+        path = config.get(key_path)
+        logging.info(f"Loading covariance matrix from file specified in config: {path}")
+        if path:
+            if path.endswith(".npy"):
+                return np.load(path)
+            else:
+                # assume CSV
+                return np.loadtxt(path, delimiter=",")
+    else:
+        logging.warning(
+            f"Explicit covariance matrix was not found in config under {key_matrix} or {key_path} and will be built from the specified uncertainties."
+        )
+
+    return None
