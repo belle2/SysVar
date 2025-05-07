@@ -255,8 +255,41 @@ class UncorrelatedUncertainty(Uncertainty):
 
 
 class ExplicitlyCorrelatedUncertainty(Uncertainty):
-    def __init__(self):
+    def __init__(
+        self,
+        name: str,
+        errors: np.ndarray,
+        visual_labels: List[str],
+        explicit_cov_matrix: np.ndarray | None = None,
+    ):
+        self.explicit_cov_matrix = explicit_cov_matrix
+        super().__init__(name, errors, visual_labels)
+        self.corr_matrix = self.build_correlation_matrix()
+        # self._cov_matrix = (
+        #     cov_matrix
+        #     if cov_matrix is not None
+        #     else np.diag(np.square(self.errors))  # Fallback to uncorrelated
+        # )
 
-        raise NotImplementedError(
-            "Only fully correlated or uncorrelated uncertainties so far"
-        )
+    def build_covariance(self) -> np.ndarray:
+        """
+        Build the covariance matrix of the explicitly correlated uncertainty.
+
+        Returns:
+            np.ndarray: The covariance matrix of the uncertainty.
+
+        """
+        return self.explicit_cov_matrix
+
+    def build_correlation_matrix(self):
+        """
+        Build the correlation matrix of the explicitly correlated uncertainty.
+
+        Returns:
+            np.ndarray: The correlation matrix of the uncertainty.
+
+        """
+        if self.cov_matrix is None:
+            raise ValueError("Covariance matrix is not defined.")
+        
+        return self.cov_matrix / np.outer(self.errors, self.errors)

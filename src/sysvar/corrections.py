@@ -19,9 +19,10 @@ from .uncertainties import (
     FullyCorrelatedUncertainty,
     FullyCorrelatedUncertaintyInParts,
     UncorrelatedUncertainty,
+    ExplicitlyCorrelatedUncertainty,
     get_uncertainty_types,
 )
-from sysvar.utils import SavableAttributesObject, read_yaml
+from sysvar.utils import SavableAttributesObject, read_yaml, load_covariance_matrix
 from sysvar.visualize import CorrectionVisualizer, UncertaintyVisualizer
 
 import logging
@@ -117,7 +118,7 @@ class BaseCorrection(ABC, SavableAttributesObject):
         else:
             raise ValueError("No uncertainties have been added to the correction")
 
-    def add_uncertainty(self, unc_name, unc_values, unc_obj: Uncertainty) -> None:
+    def add_uncertainty(self, unc_name, unc_values, unc_obj: Uncertainty, explicit_cov_matrix: Optional[np.ndarray] = None) -> None:
         """
         Add an uncertainty to the Correction.
 
@@ -133,27 +134,61 @@ class BaseCorrection(ABC, SavableAttributesObject):
                 f"An uncertainty with the name {unc_name} already exist in the set of uncertainties that that have been added to the Correction. Make sure that you add a specific uncertainty only once, and that there are no duplicate names"
             )
         else:
-            self.uncertainties.update(
-                {unc_name: unc_obj(unc_name, unc_values, self.visual_labels)}
-            )
+            if self.cov_matrix is not None:
+                # Use the provided covariance matrix to create an explicitly correlated uncertainty
+                self.uncertainties.update(
+                    {unc_name: unc_obj(unc_name, unc_values, self.visual_labels, explicit_cov_matrix)}
+                )
+            else:
+                self.uncertainties.update(
+                    {unc_name: unc_obj(unc_name, unc_values, self.visual_labels)}
+                )
 
     def populate_uncertainties(self):
 
-        # Load the implemented uncertainty types
-        sysvar_uncertainties = get_uncertainty_types()
+        """
+        Populate the `uncertainties` attribute with uncertainty objects based on the provided information.
 
-        for unc_ctgy, uncertainty_dictionary in self.info["uncertainties"].items():
-            if unc_ctgy not in sysvar_uncertainties.keys():
-                raise UnkownUncertaintyType(
-                    f"Unkown type of uncertainty is declared in the yaml file. Available uncertainty types are: ({', '.join(list(sysvar_uncertainties.keys()))}) but '{unc_ctgy}' was found in the yaml file"
-                )
-            else:
-                for unc_name, unc_values in uncertainty_dictionary.items():
-                    self.add_uncertainty(
-                        unc_name=unc_name,
-                        unc_values=unc_values,
-                        unc_obj=sysvar_uncertainties[unc_ctgy],
+        This method adds uncertainties either from a provided covariance matrix (explicitly correlated uncertainty),
+        or from a dictionary of uncertainty types and values specified in the `info` attribute.
+
+        If a covariance matrix (`cov_matrix`) is available, it creates and adds a single
+        `ExplicitlyCorrelatedUncertainty`. Otherwise, it looks up available uncertainty types,
+        validates them, and populates the uncertainties accordingly.
+
+        Raises:
+            UnknownUncertaintyType: If an unsupported uncertainty type is found in the input data.
+
+        Notes:
+            - The uncertainty type definitions are expected to be returned from `get_uncertainty_types()`.
+            - Each uncertainty must have a unique name.
+        """
+
+        if self.cov_matrix is not None:
+            # Use the provided covariance matrix to create an explicitly correlated uncertainty
+            errors = np.sqrt(np.diag(self.cov_matrix))  # Extract errors from diagonal
+            self.add_uncertainty(
+                unc_name="explicit_covariance",
+                unc_values=errors,
+                unc_obj=ExplicitlyCorrelatedUncertainty,
+                explicit_cov_matrix = self.cov_matrix,
+            )
+        else:
+        # Load the implemented uncertainty types
+            sysvar_uncertainties = get_uncertainty_types()
+
+            for unc_ctgy, uncertainty_dictionary in self.info["uncertainties"].items():
+                if unc_ctgy not in sysvar_uncertainties.keys():
+                    raise UnkownUncertaintyType(
+                        f"Unkown type of uncertainty is declared in the yaml file. Available uncertainty types are: ({', '.join(list(sysvar_uncertainties.keys()))}) but '{unc_ctgy}' was found in the yaml file"
                     )
+                else:
+                    for unc_name, unc_values in uncertainty_dictionary.items():
+                        self.add_uncertainty(
+                            unc_name=unc_name,
+                            unc_values=unc_values,
+                            unc_obj=sysvar_uncertainties[unc_ctgy],
+                        )
 
     def plot_error_comparison(self, save: bool = False, filename: str = ""):
 
@@ -189,6 +224,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
 
         self.visualizer = None
         self.title = self.info["title"]
+        self.cov_matrix = load_covariance_matrix(self.info)
 
     def add_extra_cuts(self, queries: str, prefix: str) -> str:
         if self._get_extra_cut_info() is not None:
@@ -220,6 +256,80 @@ class BaseCorrectionFromYaml(BaseCorrection):
 
     def _get_extra_cut_info(self):
         return self.info["extra_cuts"]
+    
+    @property
+    def table_dir(self) -> str:
+        """
+        Returns the directory path where the tables are stored.
+
+        Returns:
+            str: The directory path where the tables are stored.
+        """
+        return self.info["corrections"]["table_dir"]
+
+    @property
+    def table_name(self) -> str:
+        """
+        Returns the table name by reading it from the config file.
+
+        Returns:
+            str: The table name.
+        """
+        return self.info["corrections"]["table_name"]
+
+    @property
+    def table_ext(self) -> str:
+        """
+        Returns the table extension by reading it from the config file.
+
+        Returns:
+            str: The table extension.
+        """
+        return self.info["corrections"]["table_ext"]
+    
+    @property
+    def table_key(self) -> str:
+        """
+        Returns the table key by reading it from the config file.
+
+        Returns:
+            str: The table key.
+        """
+        return self.info["corrections"]["table_key"]
+       
+    def build_table_path(self, suffix: Optional[str] = None) -> str:
+        """
+        Builds the path for a table file based on the given suffix.
+
+        Args:
+            suffix (str): The suffix to be added to the table name.
+
+        Returns:
+            str: The full path of the table file.
+
+        Raises:
+            ValueError: If the table extension is unknown.
+
+        """
+        if suffix is not None:
+            if not isinstance(suffix, str):
+                raise ValueError(
+                    f"Suffix must be a string, but got {type(suffix)}"
+                )
+            else:
+                base_name = f"{self.table_name}_{suffix}"
+        else:
+            base_name = self.table_name
+
+        if self.table_ext in ["txt", "csv"]:
+            filename = ".".join((base_name, self.table_ext))
+
+        else:
+            raise ValueError(
+                f"Unknown table extension {self.table_ext}. Supported extensions are: txt, csv"
+            )
+            
+        return path.join(self.table_dir, filename)
 
 
 @dataclass
@@ -234,7 +344,7 @@ class Correction1D(BaseCorrectionFromYaml):
 
         super().__post_init__()
 
-        self.central_values = self.info["correction"]
+        self.central_values = self.read_corrections()
         self.dependant_variable = self.info["dependant_variable"]
         self.unit = self.info["unit"]
 
@@ -242,6 +352,39 @@ class Correction1D(BaseCorrectionFromYaml):
         self.upper_bounds = self.info["max"]
 
         self.populate_uncertainties()
+
+
+    def read_corrections(self) -> np.ndarray:
+        """
+        Reads correction values either directly from the config or from a table file.
+
+        This method checks whether the 'corrections' entry in the config (`self.info`)
+        is a list/array or a dictionary. If it is a list or NumPy-compatible array,
+        the correction values are loaded directly. If it is a dictionary, the method
+        builds the table path using `self.build_table_path()`, reads the table, and 
+        extracts the correction values using the key specified in `self.table_key`.
+
+        Returns:
+            np.ndarray: An array of correction values.
+
+        Raises:
+            KeyError: If 'corrections' or `self.table_key` is missing from the config.
+            FileNotFoundError: If the table file does not exist at the constructed path.
+            ValueError: If the table does not contain the specified key.
+        """
+
+        correction_info = self.info["corrections"]
+
+        if isinstance(correction_info, (list, np.ndarray)):
+            logging.info("Loading correction values from config array.")
+            return np.asarray(correction_info)
+        
+        elif isinstance(correction_info, dict): 
+            logging.info("Loading correction values from config table.")
+            table_path = self.build_table_path()
+            table = read_csv(table_path)
+            # Convert the table to a numpy array
+            return np.asarray(table[self.table_key])
 
     @property
     def value_edges(self) -> np.ndarray:
@@ -331,15 +474,7 @@ class Correction2D(BaseCorrectionFromYaml):
         table_path = self.build_table_path("sys")
         # Add column names when reading to skip creation of index column
         return read_csv(table_path, names=[f"p bin {i}" for i in range(8)])
-
-    def build_table_path(self, suffix: str) -> str:
-
-        table_dir = self.info["table_dir"]
-        table_name = self.info["table_name"]
-
-        filename = ".".join(("_".join((table_name, suffix)), "txt"))
-        return path.join(table_dir, filename)
-
+    
     @property
     def visual_labels(self) -> List[str]:
         return [

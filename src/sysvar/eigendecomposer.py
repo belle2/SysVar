@@ -18,7 +18,7 @@ from sysvar.templates import Template1D, TemplateND
 from sysvar.visualize import EigenDecomposerVisualizer
 from sysvar.utils import SavableAttributesObject
 
-from sysvar.utils import read_yaml, SavableAttributesObject
+from sysvar.utils import read_yaml, SavableAttributesObject, load_covariance_matrix
 
 import logging
 
@@ -43,6 +43,7 @@ class EigenDecomposer(SavableAttributesObject):
         if syst_effect is not None:
             self.correction = create_correction_object(syst_effect, settings["MC_prod"])
             self.variator = Variator(self.correction, Nvar=settings["Nvar"])
+
             self.N_important_dims = 0
             self.important_dims_indices = None
         else:

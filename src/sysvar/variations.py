@@ -58,8 +58,8 @@ class Variator(ABC, SavableAttributesObject):
             np.ndarray: The total covariance matrix.
 
         """
-        if hasattr(self, "_cov_matrix"):  # Check if _cov_matrix has been set
-            return self._cov_matrix
+        if hasattr(self.correction, "cov_matrix") and self.correction.cov_matrix is not None:
+            return self.correction.cov_matrix
         else:
             if len(self.correction.uncertainties.values()) > 1:
                 return np.add(
@@ -67,10 +67,6 @@ class Variator(ABC, SavableAttributesObject):
                 )
             else:
                 return next(iter(self.correction.uncertainties.values())).cov_matrix
-
-    @cov_matrix.setter
-    def cov_matrix(self, cov_matrix):
-        self._cov_matrix = cov_matrix
 
     @property
     def corr_matrix(self) -> np.ndarray:
