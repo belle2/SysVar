@@ -35,6 +35,7 @@ class Template(ABC, SavableAttributesObject):
         prefices: None | str | list = None,
         correction: None | BaseCorrection = None,
         variator: None | Variator = None,
+        verbose: bool = True,
     ):
         super().__init__()
         if self._is_correct_binning(df.columns, binning):
@@ -44,16 +45,73 @@ class Template(ABC, SavableAttributesObject):
 
         # TODO have a method that build the column name e.g. from prefix and syst_weight and
         # add a check of is_existing_variable
-        self.syst_weight = syst_weight
-        self.prefices = prefices
+        self._syst_weight = syst_weight
+        self._prefices = prefices
 
         # Here the deep copy ensures that we're not affecting the original dataframe
-        self.correction = correction
-        self.df = df[self._collect_columns_names()].copy(deep=True)
-        # TODO Make a deep copy only of the columns that are needed
+        self._correction = correction
+        self._variator = variator
+        self._Nvar = variator.Nvar if variator is not None else variator
+
+        self.verbose = verbose
+
+        # Make a deep copy only of the columns that are needed
         # But for large dataframes we don't need to copy all these GB. only a handful of columns are necessary.
-        self.variator = variator
-        self.Nvar = variator.Nvar if variator is not None else variator
+        self.df = df
+        self.df = self.df[self._collect_columns_names()].copy(deep=True)
+
+    @property
+    def syst_weight(self) -> str:
+        return self._syst_weight
+
+    @syst_weight.setter
+    def syst_weight(self, value: str):
+        if not isinstance(value, str):
+            raise ValueError("syst_weight must be a string")
+        self._syst_weight = value
+
+    @property
+    def prefices(self) -> str | list:
+        return self._prefices
+
+    @prefices.setter
+    def prefices(self, value: str | list):
+        if not isinstance(value, (str, list)):
+            raise ValueError("prefices must be a string or a list")
+        self._prefices = value
+
+    @property
+    def correction(self) -> BaseCorrection:
+        return self._correction
+
+    @correction.setter
+    def correction(self, value: BaseCorrection):
+        if not isinstance(value, BaseCorrection):
+            raise ValueError("correction must be a BaseCorrection object")
+        self._correction = value
+
+    @property
+    def variator(self) -> Variator:
+        return self._variator
+
+    @variator.setter
+    def variator(self, value: Variator):
+        if not isinstance(value, Variator):
+            raise ValueError("variator must be a Variator object")
+        self._variator = value
+
+    @property
+    def Nvar(self) -> int:
+        return self._Nvar
+
+    @Nvar.setter
+    def Nvar(self, value: int):
+        if not isinstance(value, int):
+            raise ValueError("Nvar must be an integer")
+        self._Nvar = value
+
+    def drop_unecessary_columns(self):
+        self.df = self.df[self._collect_columns_names()]
 
     @property
     def cov_matrix(self) -> np.ndarray:
@@ -199,10 +257,8 @@ class Template(ABC, SavableAttributesObject):
                 self.correction.dependant_variable,
             ]
         elif self.correction is None:
-            logging.warn(
-                "Correction object is None. If you're saving nominal templates this is ok"
-            )
-            return list(set(columns))
+            # Return all the columns if no correction can be found
+            return list(set(self.df.columns))
         else:
             raise TypeError(
                 f"Type {type(self.correction)} not recognized. Please use Correction1D, CorrectionBF, Correction2D or CorrectionPID, CustomCorrection"
@@ -367,8 +423,8 @@ class Template(ABC, SavableAttributesObject):
             # This is aligned for Felix's tuples now
             elif (
                 index in ["up", "down"]
-                or index in [f"up{x}" for x in range(9)]
-                or index in [f"down{x}" for x in range(9)]
+                or index in [f"up{x}" for x in range(self.Nvar)]
+                or index in [f"down{x}" for x in range(self.Nvar)]
             ):
                 # PATCH
                 # Now I'm replacing 0s with 1s to avoid NANs in the histogram
@@ -379,8 +435,19 @@ class Template(ABC, SavableAttributesObject):
                         self.df[self.total_weight] / self.df[weightname].replace(0, 1)
                     ) * (self.df["_".join((weightname, index))])
                 else:
-                    raise NotImplementedError(
-                        "Only one prefix at a time currently! Revisit this for HID and pi0s"
+                    weightnames = [
+                        "_".join([prefix, self.syst_weight]) for prefix in self.prefices
+                    ]
+
+                    weights = np.array(
+                        self.df[self.total_weight]
+                        / self.df[weightnames].replace(0, 1).prod(axis=1)
+                        * self.df[
+                            [
+                                "_".join((weightname, index))
+                                for weightname in weightnames
+                            ]
+                        ].prod(axis=1)
                     )
 
             else:
@@ -447,9 +514,17 @@ class Template1D(Template):
         prefices: str | list = None,
         correction: None | BaseCorrection = None,
         variator: None | Variator = None,
+        verbose: bool = True,
     ):
         super().__init__(
-            df, binning, total_weight, syst_weight, prefices, correction, variator
+            df,
+            binning,
+            total_weight,
+            syst_weight,
+            prefices,
+            correction,
+            variator,
+            verbose,
         )
 
         self.nom_hist = self.make_hist()
@@ -476,9 +551,17 @@ class TemplateND(Template):
         prefices: str | list = None,
         correction: None | BaseCorrection = None,
         variator: None | Variator = None,
+        verbose: bool = True,
     ):
         super().__init__(
-            df, binning, total_weight, syst_weight, prefices, correction, variator
+            df,
+            binning,
+            total_weight,
+            syst_weight,
+            prefices,
+            correction,
+            variator,
+            verbose,
         )
 
         self.nom_hist = self.make_hist()

@@ -16,9 +16,9 @@ from sysvar.corrections import create_correction_object
 from sysvar.variations import Variator
 from sysvar.templates import Template1D, TemplateND
 from sysvar.visualize import EigenDecomposerVisualizer
-from sysvar.utils import SavableAttributesObject
+from sysvar.channel_template_handler import ChannelTemplateHandler
+from sysvar.utils import read_yaml
 
-from sysvar.utils import read_yaml, SavableAttributesObject, load_covariance_matrix
 
 import logging
 
@@ -28,122 +28,40 @@ logging.basicConfig(
 )
 
 
-class EigenDecomposer(SavableAttributesObject):
-    def __init__(self, df: DataFrame, settings: dict, syst_effect: str):
+class EigenDecomposer(ChannelTemplateHandler):
+    def __init__(
+        self,
+        df: DataFrame,
+        settings: dict,
+        syst_effect: str | dict | None,
+        verbose: bool = True,
+    ):
 
-        super().__init__()
+        super().__init__(df, settings, verbose)
 
-        self.df = df
-        self.settings = settings
         if isinstance(syst_effect, dict):
-            self.syst_effect = syst_effect["name"]
+            self._syst_effect = syst_effect["name"]
+        elif isinstance(syst_effect, str):
+            self._syst_effect = syst_effect
+        elif syst_effect is None:
+            ValueError("syst_effect must be a string or a dict but you pass None")
         else:
-            self.syst_effect = syst_effect
+            ValueError(
+                f"syst_effect must be a string or a dict but you pass {type(syst_effect)}"
+            )
 
-        if syst_effect is not None:
-            self.correction = create_correction_object(syst_effect, settings["MC_prod"])
-            self.variator = Variator(self.correction, Nvar=settings["Nvar"])
-
-            self.N_important_dims = 0
-            self.important_dims_indices = None
-        else:
-            # This is useful for saving nominal templates
-            self.correction = None
-            self.variator = None
-        self.templates = self._create_varied_templates()
+        self.correction = create_correction_object(syst_effect, settings["MC_prod"])
+        self.variator = Variator(self.correction, Nvar=settings["Nvar"])
+        self.N_important_dims = 0
+        self.important_dims_indices = None
 
     @property
-    def decay_modes(self) -> list:
-        return [
-            (self.settings["reco_channels"][reco_channel], reco_channel)
-            for reco_channel in self._determine_reco_channels()
-        ]
+    def syst_weight(self) -> str:
+        return self.settings["systematics"][self.syst_effect]["weight"]
 
     @property
-    def _included_channels(self) -> str | List[str]:
-        """Retrieves the list of included reconstruction channels for the current systematic effect.
-
-        Returns:
-            str | List[str]: A list of included channels or a single channel as a string.
-
-        Notes:
-            - If no channels are explicitly included, returns all available reconstruction channels.
-
-        Example:
-            >>> self._included_channels
-            ['channel1', 'channel2']
-        """
-        if (
-            self.settings["systematics"][self.syst_effect]["reco_channels"]["include"]
-            is None
-        ):
-            return list(self.settings["reco_channels"].keys())
-        else:
-            return self.settings["systematics"][self.syst_effect]["reco_channels"][
-                "include"
-            ]
-
-    @property
-    def _excluded_channels(self) -> None | str | List[str]:
-        """Retrieves the list of excluded reconstruction channels for the current systematic effect.
-
-        Returns:
-            None | str | List[str]: A list of excluded channels, a single channel as a string, or an empty list if none are excluded.
-
-        Example:
-            >>> self._excluded_channels
-            ['channel3', 'channel4']
-        """
-        if (
-            self.settings["systematics"][self.syst_effect]["reco_channels"]["exclude"]
-            is None
-        ):
-            return []
-        else:
-            return self.settings["systematics"][self.syst_effect]["reco_channels"][
-                "exclude"
-            ]
-
-    def _determine_reco_channels(self) -> List[str]:
-        """Determines the final list of reconstruction channels to be used, based on inclusion and exclusion criteria.
-
-        Returns:
-            List[str]: A list of reconstruction channel names that are included and not excluded.
-
-        Example:
-            >>> self._determine_reco_channels()
-            ['channel1', 'channel2']
-        """
-        if self.syst_effect is None:
-            reco_channels = self.settings["reco_channels"].keys()
-        else:
-            reco_channels = [
-                reco_channel_name
-                for reco_channel_name in self.settings["reco_channels"].keys()
-                if reco_channel_name in self._included_channels
-                and reco_channel_name not in self._excluded_channels
-            ]
-        return reco_channels
-
-    @property
-    def template_names(self) -> list:
-
-        if (
-            self.syst_effect is not None
-            and self.settings["systematics"][self.syst_effect]["templates"] is not None
-        ):
-            return [
-                template_name
-                for template_name in self.settings["systematics"][self.syst_effect][
-                    "templates"
-                ]
-            ]
-        else:
-            return [template_name for template_name in self.settings["templates"]]
-
-    @property
-    def Nbins(self) -> int:
-        return np.prod([len(bins) - 1 for bins in self.settings["bins"].values()])
+    def prefices(self) -> str:
+        return self.settings["systematics"][self.syst_effect]["prefices"]
 
     @property
     def precision(self) -> float:
@@ -153,27 +71,11 @@ class EigenDecomposer(SavableAttributesObject):
     def precision(self, precision):
         self._precision = precision
 
-    @property
-    def iterator(self) -> itertools.product:
-        # Making this a propery to ensure that the iterations are always the same
-        # This avoids inconsistencies when creating the templates and when saving them
-        return itertools.product(self.decay_modes, self.template_names)
-
-    @property
-    def enumerated_iterator(self) -> itertools.product:
-        # Making this a propery to ensure that the iterations are always the same
-        # This avoids inconsistencies when creating the templates and when saving them
-        return itertools.product(
-            enumerate(self.decay_modes), enumerate(self.template_names)
-        )
-
-    @cached_property
-    def nominal_hist(self) -> np.ndarray:
-        return np.vstack([x.make_hist()[0] for x in self.templates])
-
     @cached_property
     def combined_variations(self) -> np.ndarray:
-        return np.vstack([x._get_absolute_variations() for x in self.templates])
+        return np.vstack(
+            [x._get_absolute_variations() for x in self.templates.values()]
+        )
 
     @property
     def cov(self) -> np.ndarray:
@@ -231,113 +133,32 @@ class EigenDecomposer(SavableAttributesObject):
     def var2cov(mat) -> np.ndarray:
         return np.outer(mat, mat)
 
-    def _create_varied_templates(self):
+    def vary_templates(self):
 
         previous_reco_mode = None
-        varied_templates = []
-        # Extract column names from settings for readability
-        reco_col = self.settings["reco_channel_id_column"]
-        template_col = self.settings["template_id_column"]
-
-        for reco_mode, template_name in self.iterator:
-
+        for (reco_mode, template_name), template in zip(
+            self.iterator, self.templates.values()
+        ):
             if reco_mode != previous_reco_mode:
-                logging.info(
-                    "########## Reco channel: %s ##########", str(reco_mode[1])
-                )
+                if self.verbose:
+                    logging.info(
+                        "########## Reco channel: %s ##########", str(reco_mode[1])
+                    )
 
-            # Apply the filter using .loc for better performance
-            tmp_df = self.df.loc[
-                (self.df[reco_col].isin(reco_mode[0]))
-                & (self.df[template_col] == template_name)
-            ]
+            # Update the systematic info of the templates
+            template.syst_weight = self.syst_weight
+            template.prefices = self.prefices
+            template.correction = self.correction
+            template.variator = self.variator
+            template.Nvar = self.variator.Nvar
 
-            # Skip template create if the query yields an empty dataframe
-            if len(tmp_df) < 1:
-                logging.warn("Skipping template %s", str(template_name))
-                # PATCH FIX
-                # This just creates an empty dataframe so that TemplateND doesn't fail.
-                # Maybe it's okay to keep doing this w/o a fix
-                tmp_df = DataFrame(0, index=np.arange(1), columns=self.df.columns)
-
-            template = self._get_template_child_class(
-                self.settings["bins"][reco_mode[1]]
-            )
-
-            # TODO I don't like the switch between nominal and varied templates
-            t = template(
-                df=tmp_df,
-                binning=self.settings["bins"][reco_mode[1]],
-                total_weight=self.settings["total_weight"],
-                syst_weight=(
-                    self.settings["systematics"][self.syst_effect]["weight"]
-                    if self.syst_effect is not None
-                    else None
-                ),
-                prefices=(
-                    self.settings["systematics"][self.syst_effect]["prefices"]
-                    if self.syst_effect is not None
-                    else None
-                ),
-                correction=self.correction,
-                variator=self.variator,
-            )
-
-            # FIX this defaults to TemplateND logging. Make it more generic
-            if not len(tmp_df) < 1:
-                logging.info(
-                    "Building %s for %s", str(type(t).__name__), str(template_name)
-                )
-
-            if self.syst_effect is not None:
-                t.add_variations()
-
-            varied_templates.append(t)
+            # Keep only the necessary columns to avoid memory issues
+            template.drop_unecessary_columns()
+            if self.verbose:
+                logging.info("Adding variations to %s template", str(template_name))
+            template.add_variations()
 
             previous_reco_mode = reco_mode
-
-        return varied_templates
-
-    @staticmethod
-    def _get_template_child_class(binning):
-        """Determines the appropriate template class based on the dimensionality of the binning.
-
-        Args:
-            binning (dict): A dictionary representing the binning configuration.
-
-        Returns:
-            class: The appropriate template class (`Template1D` or `TemplateND`).
-
-        Raises:
-            NotImplementedError: If the binning dimensionality is not 1D or 2D.
-
-        Example:
-            >>> binning = {'x': [0, 1, 2, 3]}
-            >>> template_class = _get_template_child_class(binning)
-            >>> template_class
-            <class 'Template1D'>
-
-            >>> binning = {'x': [0, 1, 2, 3], 'y': [0, 1, 2]}
-            >>> template_class = _get_template_child_class(binning)
-            >>> template_class
-            <class 'TemplateND'>
-
-            >>> binning = {'x': [0, 1, 2, 3], 'y': [0, 1, 2], 'z': [0, 1]}
-            >>> template_class = _get_template_child_class(binning)
-            Traceback (most recent call last):
-                ...
-            NotImplementedError: Only 1D and 2D histograms are implemented so far. Please check the binning of your reconstruction channels.
-        """
-        if len(binning.keys()) == 1:
-            template = Template1D
-        elif len(binning.keys()) > 1:
-            template = TemplateND
-        else:
-            raise NotImplementedError(
-                "Only 1D and ND histograms are implemented so far. Please check the binning of your reconstruction channels."
-            )
-
-        return template
 
     def find_important_eigendimension_indices(self, method: str = "max_differences"):
 
@@ -439,71 +260,6 @@ class EigenDecomposer(SavableAttributesObject):
             self.N_important_dims,
         )
 
-    @staticmethod
-    def _get_TBranch_name(*args):
-        return "/".join(args)
-
-    def save_nominal_templates(self, filepath=None, data=None):
-
-        # FIX there needs to be a check here to not recreate the file if it already exists or has nominal templates.
-        # Now the user needs to be careful to not mess up the file and lose previously written nominals
-        # Override the global filepath in case we want to run on a batch with b2luigi
-        filepath = self.settings["output_filepath"] if filepath is None else filepath
-        with uproot.recreate(filepath, compression=None) as newfile:
-            logging.info("Recreate file with uproot: %s", filepath)
-
-            previous_tree = None
-
-            for (tree, ctgy), t in zip(self.iterator, self.templates):
-
-                if tree != previous_tree:
-                    logging.info(50 * "#")
-                    logging.info("########## Reco channel: %s ##########", str(tree[1]))
-                    logging.info(50 * "#")
-
-                branch_name = self._get_TBranch_name(tree[1], ctgy, "Nominal")
-                logging.info(
-                    "Saving Nominal MC template %s in TBranch: %s",
-                    str(ctgy),
-                    branch_name,
-                )
-
-                newfile[branch_name] = t.make_hist()
-                previous_tree = tree
-
-            logging.info(50 * "#")
-            logging.info("########## Observed data ##########")
-            logging.info(50 * "#")
-            for tree in self.decay_modes:
-                filedir = f"{tree[1]}/Data/Nominal"
-                if data is None:
-                    logging.info(
-                        "Adding empty observed Data for region: %s in %s",
-                        tree[1],
-                        filedir,
-                    )
-                    # Save empty data now as we work only on Asimov
-                    newfile[filedir] = np.array([0, 0, 0]), np.array([0, 1, 2, 3])
-                else:
-                    if not isinstance(data, DataFrame):
-                        raise TypeError("data must be a pandas DataFrame")
-
-                    reco_col = self.settings["reco_channel_id_column"]
-                    binning = self.settings["bins"][tree[1]]
-
-                    hist = np.histogramdd(
-                        np.array(
-                            data.query(f"{reco_col} in {tree[0]}")[[*binning.keys()]]
-                        ),
-                        bins=[bins for bins in binning.values()],
-                    )
-                    logging.info(
-                        "Adding observed Data region : %s in %s", tree[1], filedir
-                    )
-                    newfile[filedir] = hist[0].flatten(), np.linspace(
-                        0, 1, hist[0].flatten().shape[0] + 1
-                    )
-
     def save_template_variations(self, filepath=None):
 
         # Override the global filepath in case we want to run on a batch with b2luigi
@@ -517,7 +273,7 @@ class EigenDecomposer(SavableAttributesObject):
 
             index = 0
             for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
-                self.enumerated_iterator, self.templates
+                self.enumerated_iterator, self.templates.values()
             ):
 
                 if tree != previous_tree:
@@ -572,7 +328,7 @@ class EigenDecomposer(SavableAttributesObject):
 
             index = 0
             for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
-                self.enumerated_iterator, self.templates
+                self.enumerated_iterator, self.templates.values()
             ):
 
                 if tree != previous_tree:
@@ -614,7 +370,7 @@ class EigenDecomposer(SavableAttributesObject):
 
             index = 0
             for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
-                self.enumerated_iterator, self.templates
+                self.enumerated_iterator, self.templates.values()
             ):
 
                 if tree != previous_tree:
@@ -656,31 +412,25 @@ class EigenDecomposer(SavableAttributesObject):
         filepath = self.settings["output_filepath"] if filepath is None else filepath
         # extract its topdir
         base_path = path.dirname(filepath)
-        # Loop over all the channels
-        for i, dm in enumerate(self.decay_modes):
-            logging.info("########## Reco channel: %s ##########", str(dm[1]))
-            # Loop over all the templates
-            for j, t in enumerate(self.template_names):
-                # extract the template index as all of them are a big list
-                template_index = len(self.template_names) * i + (j)
-                tmp_template = self.templates[template_index]
-                # If this is the first templates initialize an emtpy cov matrix
-                if j == 0:
-                    cov = np.zeros((tmp_template.Nbins, tmp_template.Nbins))
+        # Loop over all the templates
+        for j, tmp_template in enumerate(self.templates.values()):
+            # If this is the first templates initialize an emtpy cov matrix
+            if j == 0:
+                cov = np.zeros((tmp_template.Nbins, tmp_template.Nbins))
                 # Now add the template cov matrix
-                cov += tmp_template.cov_matrix
+            cov += tmp_template.cov_matrix
 
             # Once we have looped over all the templates then save the cov matrix for this channel
 
-            cov_path_dir = path.join(base_path, f"cov_matrices")
-            # check if the covariance directory exists
-            if not path.exists(cov_path_dir):
-                # if not create it
-                makedirs(cov_path_dir)
+        cov_path_dir = path.join(base_path, f"cov_matrices")
+        # check if the covariance directory exists
+        if not path.exists(cov_path_dir):
+            # if not create it
+            makedirs(cov_path_dir)
 
-            outpath = path.join(cov_path_dir, f"{dm[1]}_{self.syst_effect}_cov.npy")
-            logging.info("Save covariance matrix at %s ##########", str(outpath))
-            np.save(outpath, cov)
+        outpath = path.join(cov_path_dir, f"{dm[1]}_{self.syst_effect}_cov.npy")
+        logging.info("Save covariance matrix at %s ##########", str(outpath))
+        np.save(outpath, cov)
 
     def plot_cov_diff(self, save: bool = False, filename: str = ""):
 
@@ -690,3 +440,73 @@ class EigenDecomposer(SavableAttributesObject):
     def plot_corr_matrix(self, save: bool = False, filename: str = ""):
         self.visualizer = EigenDecomposerVisualizer(self)
         self.visualizer.plot_corr_matrix(save=save, filename=filename)
+
+
+class ExistingEigenVariationsSaver(ChannelTemplateHandler):
+
+    def __init__(self, df: DataFrame, settings: dict, verbose: bool = True):
+        super().__init__(df, settings, verbose)
+
+    @property
+    def weight(self) -> str:
+        return self.settings["systematics"][self.syst_effect]["weight"]
+
+    @property
+    def prefices(self) -> str | list | None:
+        return self.settings["systematics"][self.syst_effect]["prefices"]
+
+    @property
+    def Nvar(self) -> int:
+        return self.settings["systematics"][self.syst_effect]["Nvar"]
+
+    def save_existing_eigenvariations(self, filepath=None, verbose: bool = True):
+
+        # Override the global filepath in case we want to run on a batch with b2luigi
+        filepath = self.settings["output_filepath"] if filepath is None else filepath
+        with uproot.update(filepath) as newfile:
+            logging.info(
+                "Updating file with uproot: %s", self.settings["output_filepath"]
+            )
+            previous_tree = None
+
+            for ((tree_i, tree), (ctgy_i, ctgy)), t in zip(
+                self.enumerated_iterator, self.templates.values()
+            ):
+
+                if tree != previous_tree:
+                    logging.info(50 * "#")
+                    logging.info("########## Reco channel: %s ##########", str(tree[1]))
+                    logging.info(50 * "#")
+
+                for n in range(self.Nvar):
+
+                    branch_name = self._get_TBranch_name(
+                        tree[1], ctgy, f"{self.syst_effect}_var{n+1}_up"
+                    )
+                    if verbose:
+                        logging.info(
+                            "Saving Up variation of MC template %s in TBranch: %s",
+                            str(ctgy),
+                            branch_name,
+                        )
+
+                    t.syst_weight = self.weight
+                    t.prefices = self.prefices
+                    t.Nvar = self.Nvar
+
+                    varied_histo = t.make_hist(f"up{n}")
+                    newfile[branch_name] = varied_histo[0], varied_histo[1]
+
+                    branch_name = self._get_TBranch_name(
+                        tree[1], ctgy, f"{self.syst_effect}_var{n+1}_down"
+                    )
+                    if verbose:
+                        logging.info(
+                            "Saving Down variation of %s in TBranch: %s",
+                            str(ctgy),
+                            branch_name,
+                        )
+                    varied_histo = t.make_hist(f"down{n}")
+                    newfile[branch_name] = varied_histo[0], varied_histo[1]
+
+                previous_tree = tree

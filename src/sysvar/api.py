@@ -8,9 +8,10 @@ from pandas import DataFrame, concat, read_csv
 
 from sysvar.variations import Variator
 from sysvar.corrections import create_correction_object
-from sysvar.eigendecomposer import EigenDecomposer
+from sysvar.eigendecomposer import EigenDecomposer, ExistingEigenVariationsSaver
 from sysvar.visualize import CorrectionVisualizer, UncertaintyVisualizer
 from sysvar.covariance_calculator import CovarianceCalculator
+from sysvar.channel_template_handler import ChannelTemplateHandler
 
 import logging
 
@@ -92,6 +93,7 @@ def eigendecompose(
     prc: float = 1e-4,
     save_variations: bool = False,
     save_channel_covariance_matrices: bool = False,
+    verbose: bool = True,
 ):
     """
     Performs eigendecomposition on the input DataFrame based on specified settings,
@@ -114,7 +116,8 @@ def eigendecompose(
         EigenDecomposer: An instance of the `EigenDecomposer` class containing the decomposition results.
     """
 
-    egd = EigenDecomposer(df, settings, syst_effect)
+    egd = EigenDecomposer(df, settings, syst_effect, verbose=verbose)
+    egd.vary_templates()
     egd.precision = prc
     egd.find_important_eigendimension_indices(criterion)
 
@@ -129,8 +132,19 @@ def eigendecompose(
 def save_nominal_templates(df: DataFrame, settings: Dict, data=None):
 
     # Create an eigendecomposer object without any systematic effect
-    egd = EigenDecomposer(df=df, settings=settings, syst_effect=None)
-    egd.save_nominal_templates(data=data)
+    ecth = ChannelTemplateHandler(df=df, settings=settings)
+    ecth.save_nominal_templates(data=data)
+
+    return ecth
+
+
+def save_existing_eigenvariations(
+    df: DataFrame, settings: Dict, syst_effect: str, verbose=True
+):
+
+    ees = ExistingEigenVariationsSaver(df, settings)
+    ees.syst_effect = syst_effect
+    ees.save_existing_eigenvariations(verbose=verbose)
 
 
 def calculate_covariance_matrix(
@@ -160,6 +174,7 @@ def calculate_covariance_matrix(
     """
 
     cc = CovarianceCalculator(df, settings, syst_effect, binning, channels, input_cov)
+    cc.vary_templates()
     if save_cov:
         cc.save_covariance()
     return cc.cov
@@ -193,7 +208,7 @@ def plot_up_and_down_variations(
     filename: Union[None, str] = None,
 ):
 
-    for t in eigendecomposer_obj.templates:
+    for t in eigendecomposer_obj.templates.values():
         t.register_saving_info(eigendecomposer_obj.saving_info)
         t.plot_up_and_down_variations(save=save, filename=filename)
 
@@ -204,7 +219,7 @@ def plot_templates_relative_variations_in_grid(
     filename: Union[None, str] = None,
 ):
 
-    for t in eigendecomposer_obj.templates:
+    for t in eigendecomposer_obj.templates.values():
         t.register_saving_info(eigendecomposer_obj.saving_info)
         t.plot_relative_variations_in_grid(save=save, filename=filename)
 

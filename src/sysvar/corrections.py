@@ -118,7 +118,13 @@ class BaseCorrection(ABC, SavableAttributesObject):
         else:
             raise ValueError("No uncertainties have been added to the correction")
 
-    def add_uncertainty(self, unc_name, unc_values, unc_obj: Uncertainty, explicit_cov_matrix: Optional[np.ndarray] = None) -> None:
+    def add_uncertainty(
+        self,
+        unc_name,
+        unc_values,
+        unc_obj: Uncertainty,
+        explicit_cov_matrix: Optional[np.ndarray] = None,
+    ) -> None:
         """
         Add an uncertainty to the Correction.
 
@@ -137,7 +143,14 @@ class BaseCorrection(ABC, SavableAttributesObject):
             if self.cov_matrix is not None:
                 # Use the provided covariance matrix to create an explicitly correlated uncertainty
                 self.uncertainties.update(
-                    {unc_name: unc_obj(unc_name, unc_values, self.visual_labels, explicit_cov_matrix)}
+                    {
+                        unc_name: unc_obj(
+                            unc_name,
+                            unc_values,
+                            self.visual_labels,
+                            explicit_cov_matrix,
+                        )
+                    }
                 )
             else:
                 self.uncertainties.update(
@@ -145,7 +158,6 @@ class BaseCorrection(ABC, SavableAttributesObject):
                 )
 
     def populate_uncertainties(self):
-
         """
         Populate the `uncertainties` attribute with uncertainty objects based on the provided information.
 
@@ -171,10 +183,10 @@ class BaseCorrection(ABC, SavableAttributesObject):
                 unc_name="explicit_covariance",
                 unc_values=errors,
                 unc_obj=ExplicitlyCorrelatedUncertainty,
-                explicit_cov_matrix = self.cov_matrix,
+                explicit_cov_matrix=self.cov_matrix,
             )
         else:
-        # Load the implemented uncertainty types
+            # Load the implemented uncertainty types
             sysvar_uncertainties = get_uncertainty_types()
 
             for unc_ctgy, uncertainty_dictionary in self.info["uncertainties"].items():
@@ -256,7 +268,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
 
     def _get_extra_cut_info(self):
         return self.info["extra_cuts"]
-    
+
     @property
     def table_dir(self) -> str:
         """
@@ -286,7 +298,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
             str: The table extension.
         """
         return self.info["corrections"]["table_ext"]
-    
+
     @property
     def table_key(self) -> str:
         """
@@ -296,7 +308,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
             str: The table key.
         """
         return self.info["corrections"]["table_key"]
-       
+
     def build_table_path(self, suffix: Optional[str] = None) -> str:
         """
         Builds the path for a table file based on the given suffix.
@@ -313,9 +325,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
         """
         if suffix is not None:
             if not isinstance(suffix, str):
-                raise ValueError(
-                    f"Suffix must be a string, but got {type(suffix)}"
-                )
+                raise ValueError(f"Suffix must be a string, but got {type(suffix)}")
             else:
                 base_name = f"{self.table_name}_{suffix}"
         else:
@@ -328,7 +338,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
             raise ValueError(
                 f"Unknown table extension {self.table_ext}. Supported extensions are: txt, csv"
             )
-            
+
         return path.join(self.table_dir, filename)
 
 
@@ -353,7 +363,6 @@ class Correction1D(BaseCorrectionFromYaml):
 
         self.populate_uncertainties()
 
-
     def read_corrections(self) -> np.ndarray:
         """
         Reads correction values either directly from the config or from a table file.
@@ -361,7 +370,7 @@ class Correction1D(BaseCorrectionFromYaml):
         This method checks whether the 'corrections' entry in the config (`self.info`)
         is a list/array or a dictionary. If it is a list or NumPy-compatible array,
         the correction values are loaded directly. If it is a dictionary, the method
-        builds the table path using `self.build_table_path()`, reads the table, and 
+        builds the table path using `self.build_table_path()`, reads the table, and
         extracts the correction values using the key specified in `self.table_key`.
 
         Returns:
@@ -378,8 +387,8 @@ class Correction1D(BaseCorrectionFromYaml):
         if isinstance(correction_info, (list, np.ndarray)):
             logging.info("Loading correction values from config array.")
             return np.asarray(correction_info)
-        
-        elif isinstance(correction_info, dict): 
+
+        elif isinstance(correction_info, dict):
             logging.info("Loading correction values from config table.")
             table_path = self.build_table_path()
             table = read_csv(table_path)
@@ -474,7 +483,7 @@ class Correction2D(BaseCorrectionFromYaml):
         table_path = self.build_table_path("sys")
         # Add column names when reading to skip creation of index column
         return read_csv(table_path, names=[f"p bin {i}" for i in range(8)])
-    
+
     @property
     def visual_labels(self) -> List[str]:
         return [
@@ -705,6 +714,7 @@ class CustomCorrection(BaseCorrection):
         self.unit = self.info["unit"]
         self.title = self.info["title"]
 
+        self.cov_matrix = load_covariance_matrix(self.info)
         self.populate_uncertainties()
 
     @property
@@ -924,7 +934,9 @@ class CorrectionPID(BaseCorrectionFromYaml):
 # #######################################################################################
 
 
-def create_correction_object(syst_effect: str, MC_prod: str) -> BaseCorrection:
+def create_correction_object(
+    syst_effect: str | dict | None, MC_prod: str
+) -> BaseCorrection:
     """Retrieves amd creates the appropriate correction object based on the systematic effect and MC production type.
 
     Args:
