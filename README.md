@@ -31,7 +31,7 @@ The best practice to follow for using/contributing to the package are as follows
 
     For developer mode:
     ```bash
-    pip install -e .
+    pip install -e .[dev]
     ```
     For end-users (not recommended currently):
     ```bash
