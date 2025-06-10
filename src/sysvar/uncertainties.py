@@ -26,6 +26,14 @@ class MultiDimArrayError(Exception):
     pass
 
 
+class EmptyArrayError(Exception):
+    pass
+
+
+class ValueError(Exception):
+    pass
+
+
 class Uncertainty(ABC, SavableAttributesObject):
     """
     Abstract base class for representing uncertainties with a name and error values.
@@ -87,15 +95,22 @@ class Uncertainty(ABC, SavableAttributesObject):
         Raises:
             NotAnArrayError: If errors is not an instance of np.ndarray.
             MultiDimArrayError: If errors is not a 1D array.
+            EmptyArrayError: If errors is an empty array.
             NonMatchingCorrections: If the length of errors and corrections
                are unequal.
 
         """
-        if not isinstance(errors, np.ndarray):
+        if not isinstance(errors, np.ndarray | list):
             raise NotAnArrayError("The errors must be provided as np arrays")
 
-        elif errors.ndim > 1:
+        elif np.array(errors).ndim > 1:
             raise MultiDimArrayError("The errors must be provided as a 1D array")
+
+        elif len(errors) == 0:
+            raise EmptyArrayError("The errors array cannot be empty")
+
+        if not np.isfinite(errors).all():
+            raise ValueError("The errors array contains invalid values")
         else:
             return True
 
@@ -128,6 +143,7 @@ class FullyCorrelatedUncertainty(Uncertainty):
             errors (Iterable): An iterable containing the error values.
 
         """
+        self._is_valid_input_errors(errors)
         self.corr_matrix = np.ones((len(errors), len(errors)))
         super().__init__(name, np.array(errors), string_boundaries)
 
@@ -174,7 +190,7 @@ class FullyCorrelatedUncertaintyInParts(Uncertainty):
             errors (Iterable): An iterable containing the error values.
 
         """
-
+        self._is_valid_input_errors(errors)
         self.part_dimensions = part_dimensions
         self.corr_matrix = self.build_correlation_matrix()
         super().__init__(name, np.array(errors), string_boundaries)
@@ -240,6 +256,7 @@ class UncorrelatedUncertainty(Uncertainty):
             errors (Iterable): An iterable containing the error values.
 
         """
+        self._is_valid_input_errors(errors)
         self.corr_matrix = np.identity(len(errors))
         super().__init__(name, np.array(errors), string_boundaries)
 
@@ -259,11 +276,13 @@ class ExplicitlyCorrelatedUncertainty(Uncertainty):
         self,
         name: str,
         errors: np.ndarray,
-        visual_labels: List[str],
+        string_boundaries: List[str],
         explicit_cov_matrix: np.ndarray | None = None,
     ):
+
+        self._is_valid_input_errors(errors)
         self.explicit_cov_matrix = explicit_cov_matrix
-        super().__init__(name, errors, visual_labels)
+        super().__init__(name, errors, string_boundaries)
         self.corr_matrix = self.build_correlation_matrix()
         # self._cov_matrix = (
         #     cov_matrix
@@ -291,5 +310,5 @@ class ExplicitlyCorrelatedUncertainty(Uncertainty):
         """
         if self.cov_matrix is None:
             raise ValueError("Covariance matrix is not defined.")
-        
+
         return self.cov_matrix / np.outer(self.errors, self.errors)
