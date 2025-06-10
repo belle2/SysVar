@@ -1,6 +1,5 @@
 name: sysvar
 channels:
-  - defaults
   - conda-forge
 dependencies:
   - python
@@ -19,3 +18,7 @@ dependencies:
   - nbstripout
   - sphinx
   - recommonmark
+  - uncertainties
+  - uproot
+  - pyyaml
+  - particle
