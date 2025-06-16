@@ -100,7 +100,7 @@ class Uncertainty(ABC, SavableAttributesObject):
                are unequal.
 
         """
-        if not isinstance(errors, np.ndarray | list):
+        if not isinstance(errors, (np.ndarray, list)):
             raise NotAnArrayError("The errors must be provided as np arrays")
 
         elif np.array(errors).ndim > 1:
