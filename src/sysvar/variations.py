@@ -44,7 +44,26 @@ class Variator(ABC, SavableAttributesObject):
         super().__init__()
         self.correction = correction
         self.Nvar = Nvar
-        self.variations = self.get_correction_variations()
+        self._variations = self.get_correction_variations()
+
+    @property
+    def variations(self) -> np.ndarray:
+        return self._variations
+
+    @variations.setter
+    def variations(self, variations: np.ndarray):
+        """
+        Setter for variations. This is used to set the variations manually.
+        This is useful if the user wants to set the variations manually
+        instead of generating them from the covariance matrix.
+
+        Args:
+            variations (np.ndarray): The variations to be set.
+
+        """
+        if not isinstance(variations, np.ndarray):
+            raise TypeError("Variations must be a numpy array.")
+        self._variations = variations
 
     @property
     def cov_matrix(self) -> np.ndarray:
@@ -58,8 +77,18 @@ class Variator(ABC, SavableAttributesObject):
             np.ndarray: The total covariance matrix.
 
         """
-        if hasattr(self.correction, "cov_matrix") and self.correction.cov_matrix is not None:
+        # If we have already set the covariance matrix through the setter return this.
+        # This implies that the user knows what they're doing
+        if hasattr(self, "_cov_matrix") and self._cov_matrix is not None:
+            return self._cov_matrix
+        # If the setter has not been used
+        # either read the covariance matrix from the correction
+        elif (
+            hasattr(self.correction, "cov_matrix")
+            and self.correction.cov_matrix is not None
+        ):
             return self.correction.cov_matrix
+        # or build the covariance matrix from the uncertainties
         else:
             if len(self.correction.uncertainties.values()) > 1:
                 return np.add(
@@ -67,6 +96,11 @@ class Variator(ABC, SavableAttributesObject):
                 )
             else:
                 return next(iter(self.correction.uncertainties.values())).cov_matrix
+
+    # Useful for covariance matrix calculations for custom histgrams e.g. Data/MC plots
+    @cov_matrix.setter
+    def cov_matrix(self, cov_matrix):
+        self._cov_matrix = cov_matrix
 
     @property
     def corr_matrix(self) -> np.ndarray:
