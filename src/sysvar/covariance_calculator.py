@@ -56,7 +56,7 @@ class CovarianceCalculator(EigenDecomposer):
                 cov = np.zeros((tmp_template.Nbins, tmp_template.Nbins))
                 # Now add the template cov matrix
             cov += tmp_template.cov_matrix
-            return cov
+        return cov
 
     def save_covariance(self):
 
@@ -73,7 +73,11 @@ class CovarianceCalculator(EigenDecomposer):
                 "_".join([str(x) for x in self.channels]),
                 "_".join(list(self.binning.keys())),
                 "_".join(
-                    [str(b) for bin_list in self.binning.values() for b in bin_list]
+                    [
+                        str(np.round(b, 2))
+                        for bin_list in self.binning.values()
+                        for b in bin_list
+                    ]
                 ),
                 self.syst_effect,
                 "cov.npy",
