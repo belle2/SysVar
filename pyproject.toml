@@ -1,9 +1,156 @@
 [build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
+requires = ["setuptools>=61.2"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
-# For smarter version schemes and other configuration options,
-# check out https://github.com/pypa/setuptools_scm
-version_scheme = "no-guess-dev"
+[project]
+name = "SysVar"
+description = "Add a short description here!"
+authors = [{name = "Ilias Tsaklidis", email = "itsaklid@uni-bonn.de"}]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+]
+dependencies = [
+    'importlib-metadata; python_version<"3.8"',
+    "numpy",
+    "scipy",
+    "pandas",
+    "tqdm",
+    "matplotlib",
+    "seaborn",
+    "uncertainties",
+    "particle",
+    "PyYAML",
+    "uproot",
+]
+dynamic = ["version"]
+
+[project.readme]
+file = "README.rst"
+content-type = "text/x-rst; charset=UTF-8"
+# Add here related links, for example:
+
+[project.urls]
+Homepage = "https://github.com/pyscaffold/pyscaffold/"
+Documentation = "https://pyscaffold.org/"
+# Source = https://github.com/pyscaffold/pyscaffold/
+# Changelog = https://pyscaffold.org/en/latest/changelog.html
+# Tracker = https://github.com/pyscaffold/pyscaffold/issues
+# Conda-Forge = https://anaconda.org/conda-forge/pyscaffold
+# Download = https://pypi.org/project/PyScaffold/#files
+# Twitter = https://twitter.com/PyScaffold
+# Change if running only on Windows, Mac or Linux (comma-separated)
+# Add here all kinds of additional classifiers as defined under
+# https://pypi.org/classifiers/
+
+[project.optional-dependencies]
+# Add here additional requirements for extra features, to install with:
+# `pip install SysVar[PDF]` like:
+# PDF = ReportLab; RXP
+# Add here test requirements (semicolon/line-separated)
+testing = [
+    "setuptools",
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist[psutil]",
+]
+dev = [
+    "pre-commit",
+    "tox",
+    "nbdime",
+    "nbstripout",
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist[psutil]",
+    "sphinx",
+    "recommonmark",
+]
+docs = [
+    "sphinx",
+    "recommonmark",
+    "sphinx_rtd_theme",
+    "myst-parser",
+]
+
+[project.entry-points]
+# Add here console scripts like:
+# console_scripts =
+# script_name = sysvar.module:function
+# For example:
+# console_scripts =
+# fibonacci = sysvar.skeleton:run
+# And any other entry points, for example:
+# pyscaffold.cli =
+# awesome = pyscaffoldext.awesome.extension:AwesomeExtension
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+package-dir = {"" = "src"}
+# Require a min/specific Python version (comma-separated conditions)
+# python_requires = >=3.8
+# Add here dependencies of your project (line-separated), e.g. requests>=2.2,<3.0.
+# Version specifiers like >=2.2,<3.0 avoid problems due to API changes in
+# new major versions. This works if the required packages follow Semantic Versioning.
+# For more information, check out https://semver.org/.
+platforms = ["any"]
+license-files = ["LICENSE.txt"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests"]
+namespaces = true
+
+[tool.pytest.ini_options]
+# Specify command line options as you would do when invoking pytest directly.
+# e.g. --cov-report html (or xml) for html/xml output or --junitxml junit.xml
+# in order to write a coverage file that can be read by Jenkins.
+# CAUTION: --cov flags may prohibit setting breakpoints while debugging.
+# Comment those flags to avoid this pytest issue.
+addopts = """
+--cov=sysvar
+--cov-report=term-missing
+--cov-report=xml
+--junitxml=report.xml
+--verbose
+-n auto"""
+norecursedirs = [
+    "dist",
+    "build",
+    ".tox",
+]
+testpaths = ["tests"]
+# Use pytest markers to select/deselect specific tests
+# markers =
+# slow: mark tests as slow (deselect with '-m "not slow"')
+# system: mark end-to-end system tests
+
+[tool.devpi.upload]
+# Options for the devpi: PyPI server and packaging tool
+# VCS export must be deactivated since we are using setuptools-scm
+no_vcs = "1"
+formats = "bdist_wheel"
+
+[tool.flake8]
+# Some sane defaults for the code style checker flake8
+max_line_length = "88"
+extend_ignore = "E203, W503"
+# ^  Black-compatible
+# E203 and W503 have edge cases handled by black
+exclude = """
+.tox
+build
+dist
+.eggs
+docs/conf.py"""
+
+[tool.pyscaffold]
+# PyScaffold's parameters when the project was created.
+# This will be used when updating. Do not change!
+version = "4.4.1"
+package = "sysvar"
+# This file is used to configure your project.
+# Read more about the various options under:
+# https://setuptools.pypa.io/en/latest/userguide/declarative_config.html
+# https://setuptools.pypa.io/en/latest/references/keywords.html
