@@ -50,6 +50,32 @@ The best practice to follow for using/contributing to the package are as follows
 
 For getting familiar with the functioning and concepts of the package, a nice place to start is the example notebook located at `examples/minimal_example.ipynb`. It guides you through a prototype analysis from scratch where such a tool would be needed while explaining everything a front-end user needs to know about the package. Feel free to dig deeper into the code to access other cool stuff though!
 
+## Setting the SysVar Path
+
+**Please add the following two lines at the very beginning of every scipt that uses SysVar to point to the location where you have installed your SysVar fork**
+
+```
+import sys
+sys.path.insert(0,'{path_where_you_pip_installed_sysvar}/SysVar/src')
+```
+
+This step is currently necessary because the basf2 developers have renamed their `pidvar` class to `sysvar`, anticipating an early merge of the SysVar package into basf2.
+
+If you are running with an environment sourced from CVMFS and have not executed the code above, you will encounter the following error:
+
+```
+ModuleNotFoundError: No module named 'sysvar.utils'; 'sysvar' is not a package
+```
+
+## Further Reading
+
+We do not yet have a dedicated Sphinx webpage (coming soon), so we refer interested users to the following Belle II internal material:
+
+- [Technical talk at the Analysis Tools meeting](https://indico.belle2.org/event/12666/)
+- [Recommendations talk for end users at the (S)L Working Group meeting](https://indico.belle2.org/event/12979/)
+- [Presentation at the "Challenges in Semileptonic B Decays" outlining new gateways for measurement combinations](https://indico.cern.ch/event/1345421/contributions/6084737/)
+- [Belle II note of the analysis that inspired the creation of SysVar (see especially Sections 3.1.4 and Appendix A)](https://docs.belle2.org/pub_data/documents/4547/)
+
 
 ## Contributing
 
@@ -58,7 +84,7 @@ There are various ways in which you could contribute by just discussing ideas, s
 
 For this purpose, the first step would be to open an `Issue` with your idea/suggestion/question and choose an appropriate label(s) from the already existing ones (or open an issue to suggest a new label!):
 
--  `Urgent`: Priority task.
+-  `urgent`: Priority task.
 
 -  `bug`: An issue in the code, implementation of something etc.
 
@@ -94,8 +120,24 @@ If you are interested in contributing by coding, the guidelines to follow are:
 
 4. Ensure that your commit passes the `pre-commit` hooks and fix any eventual issues using the styling fix recommended.
 
-5. Push the local branch to your repository and open a pull request for review. Mark it as draft if there are more commits expected. Add @itsaklid and @s6agagga as reviewers.
+5. Push the local branch to your repository and open a pull request for review. Mark it as draft if there are more commits expected. Add @itsaklid or @s6agagga as reviewer.
 
 
 We encourage you to contribute and help in developing `Sysvar` further!
+
+## 👥 Contributors
+
+We gratefully acknowledge the following individuals for their code contributions to this project.
+
+| Contributor               | Email                          | Commits | Contributions                                       |
+|---------------------------|--------------------------------|---------|-----------------------------------------------------|
+| Ilias Tsaklidis           | itsaklid@uni-bonn.de           | 267     | Original idea, main developer                       |
+| Agrim Aggarwal            | s6agagga@uni-bonn.de           | 20      | Co-developer, documentation, testing                |
+| Felix Metzner             | felixmetzner@outlook.com       | 4       | Feature additions, validation, feedback             |
+| Georgios Alexandris       | galexand@uni-bonn.de           | 2       | CI/CD setup and maintenance, feedback               |
+| Maximilian Hoverath       | s6mahove@uni-bonn.de           | 2       | BF correction updates from PDG                      |
+
+> 📊 Commit counts are based on Git history (`git shortlog -sne`) and may include merge commits.
+> They reflect authored commits; contributions via design, review, and discussion are also highly valued.
+
 
