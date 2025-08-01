@@ -1,26 +1,65 @@
 stages:
+  - uv-install
+  # - pre-commit
   - test
 
 variables:
   PYTHON_VERSION: "3.11"
+  BASE_LAYER: bookworm
+  UV_VERSION: "latest"
+  ARTIFACTS_TEST_PATH: "junit/test-results.xml"
+  ARTIFACTS_COV_PATH: "coverage/"
+  COVERAGE_XML_PATH: coverage.xml
+  UV_CACHE_DIR: .uv-cache
+  # GitLab CI creates a separate mountpoint for the build directory,
+  # so we need to copy instead of using hard links.
+  UV_LINK_MODE: copy
 
 default:
-  image: python:$PYTHON_VERSION
-  before_script:
-    - pip install --upgrade pip
-    - pip install .[testing]
+  image: ghcr.io/astral-sh/uv:python$PYTHON_VERSION-$BASE_LAYER
+  
+# Persisting the uv cache between workflow runs can improve performance
+uv-install:
+  stage: uv-install
+  only:
+    - merge_requests
+    - main  
+  cache:
+    - key:
+        files:
+          - uv.lock
+      paths:
+        - $UV_CACHE_DIR 
+  script:
+    - uv sync --group test --cache-dir $UV_CACHE_DIR --locked
+    # Reduce cache size
+    - uv cache prune --ci
+
+# pre-commit:
+#   stage: pre-commit
+#   needs: [uv-install]
+#   script:
+#     - uv run pre-commit run --all-files
 
 test:
   stage: test
+  only:
+    - merge_requests
+    - main  
+  needs: [uv-install]
   script:
-    - pytest  # All options are read from setup.cfg
+    - echo "Running tests"
+    - uv run pytest -v --cov src --junitxml=$ARTIFACTS_TEST_PATH --cov-report=xml --cov-report=html --cov-report=term -n auto tests
+    - mv htmlcov $ARTIFACTS_COV_PATH
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   artifacts:
     when: always
     reports:
-      junit: report.xml  # Matches --junitxml in setup.cfg
+      junit: $ARTIFACTS_TEST_PATH
       coverage_report:
         coverage_format: cobertura
-        path: coverage.xml  # Matches --cov-report=xml in setup.cfg
+        path: coverage.xml
     paths:
-      - coverage.xml
-      - report.xml
+      - junit/test-results.xml
+      - coverage/
+    expose_as: 'test result and coverage'

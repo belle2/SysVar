@@ -1,10 +1,13 @@
 [build-system]
-requires = ["setuptools>=61.2"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
 
 [project]
 name = "SysVar"
-description = "Add a short description here!"
+dynamic = ["version"]
+requires-python = ">=3.8"
+readme = "README.md"
+description = "A tool for consistent treatment of systematics uncertainties."
 authors = [{name = "Ilias Tsaklidis", email = "itsaklid@uni-bonn.de"}]
 license = {text = "MIT"}
 classifiers = [
@@ -24,32 +27,39 @@ dependencies = [
     "PyYAML",
     "uproot",
 ]
-dynamic = ["version"]
 
-[project.readme]
-file = "README.rst"
-content-type = "text/x-rst; charset=UTF-8"
-# Add here related links, for example:
+[tool.uv]
+package = true
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+fallback-version = "0.0.0"
 
 [project.urls]
-Homepage = "https://github.com/pyscaffold/pyscaffold/"
-Documentation = "https://pyscaffold.org/"
-# Source = https://github.com/pyscaffold/pyscaffold/
-# Changelog = https://pyscaffold.org/en/latest/changelog.html
-# Tracker = https://github.com/pyscaffold/pyscaffold/issues
-# Conda-Forge = https://anaconda.org/conda-forge/pyscaffold
-# Download = https://pypi.org/project/PyScaffold/#files
-# Twitter = https://twitter.com/PyScaffold
+Homepage = "https://gitlab.desy.de/itsaklid/sysvar"
+Documentation = "https://gitlab.desy.de/itsaklid/sysvar"
+# Source =
+# Changelog =
+# Tracker =
+# Conda-Forge =
+# Download =
+# Twitter =
 # Change if running only on Windows, Mac or Linux (comma-separated)
 # Add here all kinds of additional classifiers as defined under
 # https://pypi.org/classifiers/
 
 [project.optional-dependencies]
+# This is for optional requirements we want our users to have.
+# For optional requirements used for development, see [dependency-groups]
 # Add here additional requirements for extra features, to install with:
 # `pip install SysVar[PDF]` like:
 # PDF = ReportLab; RXP
-# Add here test requirements (semicolon/line-separated)
-testing = [
+
+[dependency-groups]
+# Optional dependencies for local development, testing, docs, etc
+test = [
     "setuptools",
     "pytest",
     "pytest-cov",
@@ -72,35 +82,6 @@ docs = [
     "sphinx_rtd_theme",
     "myst-parser",
 ]
-
-[project.entry-points]
-# Add here console scripts like:
-# console_scripts =
-# script_name = sysvar.module:function
-# For example:
-# console_scripts =
-# fibonacci = sysvar.skeleton:run
-# And any other entry points, for example:
-# pyscaffold.cli =
-# awesome = pyscaffoldext.awesome.extension:AwesomeExtension
-
-[tool.setuptools]
-zip-safe = false
-include-package-data = true
-package-dir = {"" = "src"}
-# Require a min/specific Python version (comma-separated conditions)
-# python_requires = >=3.8
-# Add here dependencies of your project (line-separated), e.g. requests>=2.2,<3.0.
-# Version specifiers like >=2.2,<3.0 avoid problems due to API changes in
-# new major versions. This works if the required packages follow Semantic Versioning.
-# For more information, check out https://semver.org/.
-platforms = ["any"]
-license-files = ["LICENSE.txt"]
-
-[tool.setuptools.packages.find]
-where = ["src"]
-exclude = ["tests"]
-namespaces = true
 
 [tool.pytest.ini_options]
 # Specify command line options as you would do when invoking pytest directly.
@@ -144,13 +125,3 @@ build
 dist
 .eggs
 docs/conf.py"""
-
-[tool.pyscaffold]
-# PyScaffold's parameters when the project was created.
-# This will be used when updating. Do not change!
-version = "4.4.1"
-package = "sysvar"
-# This file is used to configure your project.
-# Read more about the various options under:
-# https://setuptools.pypa.io/en/latest/userguide/declarative_config.html
-# https://setuptools.pypa.io/en/latest/references/keywords.html
