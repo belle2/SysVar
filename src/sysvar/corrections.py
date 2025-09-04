@@ -773,7 +773,7 @@ class CorrectionPID(BaseCorrectionFromYaml):
         error_id = "sys"
         self.uncertainties.update(
             {
-                f"{error_id} uncertainty": UncorrelatedUncertainty(
+                f"{error_id} uncertainty": FullyCorrelatedUncertainty(
                     f"{error_id} uncertainty",
                     self._extract_errors(f"{error_id}"),
                     self.visual_labels,
