@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import List, Iterable, Optional, Dict
+from typing import List, Iterable, Optional, Dict, Union
 from os import path
 
 import numpy as np
 from pandas import DataFrame, concat, read_csv
+
+import matplotlib.pyplot as plt
 
 from sysvar.variations import Variator
 from sysvar.corrections import create_correction_object
@@ -184,18 +186,20 @@ def plot_analysis_corr_matrix(
     eigendecomposer_obj: EigenDecomposer,
     save: bool = False,
     filename: Union[None, str] = None,
-):
+) -> tuple[plt.Figure, plt.Axes]:
 
-    eigendecomposer_obj.plot_corr_matrix(save=save, filename=filename)
+    fig, ax = eigendecomposer_obj.plot_corr_matrix(save=save, filename=filename)
+    return fig, ax
 
 
 def plot_cov_diff(
     eigendecomposer_obj: EigenDecomposer,
     save: bool = False,
     filename: Union[None, str] = None,
-):
+) -> tuple[plt.Figure, plt.Axes]:
 
-    eigendecomposer_obj.plot_cov_diff(save=save, filename=filename)
+    fig, ax = eigendecomposer_obj.plot_cov_diff(save=save, filename=filename)
+    return fig, ax
 
 
 def register_saving_info(eigendecomposer_obj: EigenDecomposer, saving_info: Dict):
@@ -206,32 +210,44 @@ def plot_up_and_down_variations(
     eigendecomposer_obj: EigenDecomposer,
     save: bool = False,
     filename: Union[None, str] = None,
-):
+) -> List[tuple[plt.Figure, plt.Axes]]:
+
+    figures = []
 
     for t in eigendecomposer_obj.templates.values():
         t.register_saving_info(eigendecomposer_obj.saving_info)
-        t.plot_up_and_down_variations(save=save, filename=filename)
+        fig, ax = t.plot_up_and_down_variations(save=save, filename=filename)
+        figures.append((fig, ax))
+
+    return figures
 
 
 def plot_templates_relative_variations_in_grid(
     eigendecomposer_obj: EigenDecomposer,
     save: bool = False,
     filename: Union[None, str] = None,
-):
+) -> List[tuple[plt.Figure, plt.Axes]]:
+    figures = []
 
     for t in eigendecomposer_obj.templates.values():
         t.register_saving_info(eigendecomposer_obj.saving_info)
-        t.plot_relative_variations_in_grid(save=save, filename=filename)
+        fig, ax = t.plot_relative_variations_in_grid(save=save, filename=filename)
+        figures.append((fig, ax))
+
+    return figures
 
 
 def plot_correction_cov_and_corr(
     eigendecomposer_obj: EigenDecomposer,
     save: bool = False,
     filename: Union[None, str] = None,
-):
+) -> tuple[plt.Figure, plt.Axes]:
 
     eigendecomposer_obj.variator.register_saving_info(eigendecomposer_obj.saving_info)
-    eigendecomposer_obj.variator.plot_cov_and_corr(save=save, filename=filename)
+    fig, ax = eigendecomposer_obj.variator.plot_cov_and_corr(
+        save=save, filename=filename
+    )
+    return fig, ax
 
 
 def plot_correction_variations_in_grid(
@@ -239,19 +255,23 @@ def plot_correction_variations_in_grid(
     nbins=21,
     save: bool = False,
     filename: Union[None, str] = None,
-):
+) -> tuple[plt.Figure, plt.Axes]:
 
     eigendecomposer_obj.variator.register_saving_info(eigendecomposer_obj.saving_info)
-    eigendecomposer_obj.variator.plot_relative_variations_in_grid(
+    fig, ax = eigendecomposer_obj.variator.plot_relative_variations_in_grid(
         nbins=nbins, save=save, filename=filename
     )
+    return fig, ax
 
 
 def plot_correction_errors(
     eigendecomposer_obj: EigenDecomposer,
     save: bool = False,
     filename: Union[None, str] = None,
-):
+) -> tuple[plt.Figure, plt.Axes]:
 
     eigendecomposer_obj.correction.register_saving_info(eigendecomposer_obj.saving_info)
-    eigendecomposer_obj.correction.plot_error_comparison(save=save, filename=filename)
+    fig, ax = eigendecomposer_obj.correction.plot_error_comparison(
+        save=save, filename=filename
+    )
+    return fig, ax

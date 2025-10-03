@@ -58,3 +58,4 @@ MANIFEST
 */notebooks/*.ipynb
 
 .pre-commit-config.yaml
+test/

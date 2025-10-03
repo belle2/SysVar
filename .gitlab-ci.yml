@@ -17,19 +17,19 @@ variables:
 
 default:
   image: ghcr.io/astral-sh/uv:python$PYTHON_VERSION-$BASE_LAYER
-  
+
 # Persisting the uv cache between workflow runs can improve performance
 uv-install:
   stage: uv-install
   only:
     - merge_requests
-    - main  
+    - main
   cache:
     - key:
         files:
           - uv.lock
       paths:
-        - $UV_CACHE_DIR 
+        - $UV_CACHE_DIR
   script:
     - uv sync --group test --cache-dir $UV_CACHE_DIR --locked
     # Reduce cache size
@@ -45,7 +45,7 @@ test:
   stage: test
   only:
     - merge_requests
-    - main  
+    - main
   needs: [uv-install]
   script:
     - echo "Running tests"

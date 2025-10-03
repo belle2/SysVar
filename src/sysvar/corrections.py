@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, InitVar
 from typing import List, Iterable, Optional
 from os import path
+import matplotlib.pyplot as plt
 
 from particle import Particle
 
@@ -202,10 +203,13 @@ class BaseCorrection(ABC, SavableAttributesObject):
                             unc_obj=sysvar_uncertainties[unc_ctgy],
                         )
 
-    def plot_error_comparison(self, save: bool = False, filename: str = ""):
+    def plot_error_comparison(
+        self, save: bool = False, filename: str = ""
+    ) -> tuple[plt.Figure, plt.Axes]:
 
         self.visualizer = CorrectionVisualizer(self)
-        self.visualizer.plot_error_comparison(save=save, filename=filename)
+        fig, ax = self.visualizer.plot_error_comparison(save=save, filename=filename)
+        return fig, ax
 
     def plot_uncertainty(
         self, unc_name: str | None = None, save: bool = False, filename: str = ""

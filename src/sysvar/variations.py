@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable
+import matplotlib.pyplot as plt
 
 import numpy as np
 
@@ -173,9 +174,12 @@ class Variator(ABC, SavableAttributesObject):
             Nvar, self.correction.uncertainties[name].cov_matrix
         )
 
-    def plot_cov_and_corr(self, save: bool = False, filename: str = ""):
+    def plot_cov_and_corr(
+        self, save: bool = False, filename: str = ""
+    ) -> tuple[plt.Figure, plt.Axes]:
         visualizer = VariatorVisualizer(self)
-        visualizer.plot_cov_and_corr(save=save, filename=filename)
+        fig, ax = visualizer.plot_cov_and_corr(save=save, filename=filename)
+        return fig, ax
 
     def plot_gaussian_variations(self, save: bool = False, filename: str = ""):
         visualizer = VariatorVisualizer(self)
@@ -183,7 +187,10 @@ class Variator(ABC, SavableAttributesObject):
 
     def plot_relative_variations_in_grid(
         self, nbins: int = 41, save: bool = False, filename: str = ""
-    ):
+    ) -> tuple[plt.Figure, plt.Axes]:
 
         visualizer = VariatorVisualizer(self)
-        visualizer.plot_relative_variations_in_grid(nbins, save=save, filename=filename)
+        fig, ax = visualizer.plot_relative_variations_in_grid(
+            nbins=nbins, save=save, filename=filename
+        )
+        return fig, ax

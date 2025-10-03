@@ -235,12 +235,12 @@ class SavableAttributesObject:
         """
         self.saving_info = saving_info
 
+
 def load_covariance_matrix(
     config: dict,
     key_matrix: Optional[str] = None,
     key_path: str = "cov_matrix_path",
 ) -> Optional[np.ndarray]:
-    
     """Load a covariance matrix from a configuration dictionary.
 
     This function attempts to load a covariance matrix either directly from the

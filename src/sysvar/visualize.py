@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     from sysvar.corrections import BaseCorrection, CorrectionBF
@@ -22,8 +22,6 @@ import numpy as np
 import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from matplotlib.colors import LogNorm
 
 from sysvar.saver import PlotSaver
@@ -60,14 +58,23 @@ class Visualizer(ABC):
     def plot_corr_matrix(self):
         pass
 
-    def plot_cov_and_corr(self, save: bool = False, filename: str = ""):
+    def plot_cov_and_corr(
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ):
 
-        fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=DPI, sharey=True)
+        if fig is None and ax is None:
+            fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=DPI, sharey=True)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
-        self.plot_cov_matrix(ax[0])
-        self.plot_corr_matrix(ax[1])
+        self.plot_cov_matrix(fig=fig, ax=ax[0])
+        self.plot_corr_matrix(fig=fig, ax=ax[1])
 
-        self.annotate_matrix_plot(fig, ax)
+        self.annotate_matrix_plot(fig=fig, ax=ax)
 
         if save:
             self.instance.saving_info["namespace"] = ["cov_and_corr"]
@@ -81,7 +88,7 @@ class Visualizer(ABC):
 
     @staticmethod
     def plot_variation_on_axis(
-        ax: Axes,
+        ax: plt.Axes,
         x: np.ndarray,
         variation: np.ndarray,
         index: None | int = None,
@@ -96,7 +103,7 @@ class Visualizer(ABC):
         of the index.
 
         Args:
-            ax (Axes): The axis to plot on.
+            ax (plt.Axes): The axis to plot on.
             x (np.ndarray): The x values for the plot. Should be the bin mid values as the
                 method makes use of the matplotlib's steps method
             variation (np.ndarray): The variation values to plot.
@@ -136,7 +143,7 @@ class CorrectionVisualizer(Visualizer):
     def __init__(self, instance: BaseCorrection):
         super().__init__(instance)
 
-    def annotate_matrix_plot(self, ax: Axes):
+    def annotate_matrix_plot(self, ax: plt.Axes):
         raise NoMatrixError(
             "The Correction object does not have a covariance nor a correlation matrix. This is normal! Don't try to call this method on this class"
         )
@@ -151,9 +158,18 @@ class CorrectionVisualizer(Visualizer):
             "The Correction object does not have a covariance nor a correlation matrix. This is normal! Don't try to call this method on this class"
         )
 
-    def plot_error_comparison(self, save: bool = False, filename: str = ""):
+    def plot_error_comparison(
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        if fig is None and ax is None:
+            fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         # Plot the central values of the correction
         ax.errorbar(
@@ -196,9 +212,9 @@ class UncertaintyVisualizer(Visualizer):
     def __init__(self, instance: Uncertainty):
         super().__init__(instance)
 
-    def annotate_matrix_plot(self, fig: Figure, ax: Axes):
+    def annotate_matrix_plot(self, fig: plt.Figure, ax: plt.Axes):
 
-        if isinstance(ax, Axes):
+        if isinstance(ax, plt.Axes):
             self._annotate_axis(ax)
         elif isinstance(ax, np.ndarray):
             for axis in ax:
@@ -223,7 +239,7 @@ class UncertaintyVisualizer(Visualizer):
         )
 
     def plot_cov_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
+        self, ax: plt.Axes | None = None, save: bool = False, filename: str = ""
     ):
 
         if ax is None:
@@ -245,11 +261,17 @@ class UncertaintyVisualizer(Visualizer):
         return ax
 
     def plot_corr_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -266,7 +288,7 @@ class UncertaintyVisualizer(Visualizer):
             self.instance.saving_info["namespace"] = ["corr"]
             self.save_figure(fig, filename)
 
-        return ax
+        return fig, ax
 
 
 class VariatorVisualizer(Visualizer):
@@ -282,9 +304,9 @@ class VariatorVisualizer(Visualizer):
     def strings(self, values):
         self._strings = values
 
-    def annotate_matrix_plot(self, fig: Figure, ax: Axes):
+    def annotate_matrix_plot(self, fig: plt.Figure, ax: plt.Axes):
 
-        if isinstance(ax, Axes):
+        if isinstance(ax, plt.Axes):
             self._annotate_axis(ax)
         elif isinstance(ax, np.ndarray):
             for axis in ax:
@@ -314,11 +336,17 @@ class VariatorVisualizer(Visualizer):
         )
 
     def plot_cov_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         sns.heatmap(
             self.instance.cov_matrix,
@@ -329,14 +357,20 @@ class VariatorVisualizer(Visualizer):
         )
         ax.set_title("Covariance matrix")
 
-        return ax
+        return fig, ax
 
     def plot_corr_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -392,7 +426,7 @@ class VariatorVisualizer(Visualizer):
         Nvar: int = 5,
         save: bool = False,
         filename: str = "",
-    ):
+    ) -> tuple[plt.Figure, plt.Axes]:
         """
         Plots the relative variations of the templates.
         The Nvar argument specifies the number of variatios that will be plotted.
@@ -402,7 +436,7 @@ class VariatorVisualizer(Visualizer):
             Nvar (int, optional): The number of variations to visualize.
 
         Returns:
-            Tuple[Figure, Axis]: A tuple containing the figure and axis objects.
+            Tuple[plt.Figure, Axis]: A tuple containing the figure and axis objects.
 
         """
 
@@ -425,8 +459,13 @@ class VariatorVisualizer(Visualizer):
         return fig, ax
 
     def plot_relative_variations_in_grid(
-        self, nbins: int = 41, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        nbins: int = 41,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
         counts = []
         bin_edges = []
@@ -443,7 +482,10 @@ class VariatorVisualizer(Visualizer):
             counts.append(hist[0])
             bin_edges.append(hist[1])
 
-        fig, ax = plt.subplots(figsize=(5, 10))
+        if fig is None and ax is None:
+            fig, ax = plt.subplots(figsize=(5, 10))
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         cb = ax.matshow(np.array(counts).T, cmap=CMAP)
         plt.colorbar(cb)
@@ -468,9 +510,9 @@ class TemplateVisualizer(Visualizer):
     def __init__(self, instance: Template):
         super().__init__(instance)
 
-    def annotate_matrix_plot(self, ax: Axes):
+    def annotate_matrix_plot(self, ax: plt.Axes):
 
-        if isinstance(ax, Axes):
+        if isinstance(ax, plt.Axes):
             self._annotate_axis(ax)
         elif isinstance(ax, np.ndarray):
             for axis in ax:
@@ -483,13 +525,16 @@ class TemplateVisualizer(Visualizer):
 
     def plot_relative_variations_in_grid(
         self,
-        ax: Axes | None = None,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
         nbins: int = 11,
         save: bool = False,
         filename: str = "",
-    ):
-        if ax is None:
+    ) -> tuple[plt.Figure, plt.Axes]:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         counts = []
         bin_edges = []
@@ -536,14 +581,20 @@ class TemplateVisualizer(Visualizer):
             ]
             self.save_figure(fig, filename)
 
-        return ax
+        return fig, ax
 
     def plot_cov_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         sns.heatmap(
             self.instance.cov_matrix,
@@ -558,14 +609,20 @@ class TemplateVisualizer(Visualizer):
         )
         ax.set_title("Covariance matrix")
 
-        return ax
+        return fig, ax
 
     def plot_corr_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -579,14 +636,20 @@ class TemplateVisualizer(Visualizer):
         )
         ax.set_title("Correlation matrix")
 
-        return ax
+        return fig, ax
 
     def plot_nominal_template(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         self.plot_variation_on_axis(
             ax,
@@ -606,7 +669,7 @@ class TemplateVisualizer(Visualizer):
                 # Don't save the plot if this is a part of a bigger plot
                 pass
 
-        return ax
+        return fig, ax
 
     def plot_variations(self, Nvar: int = 5, save: bool = False, filename: str = ""):
 
@@ -634,13 +697,19 @@ class TemplateVisualizer(Visualizer):
         return fig, ax
 
     def plot_up_and_down_variations(
-        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: List[plt.Axes] | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(
                 2, 1, figsize=(8, 5), dpi=DPI, height_ratios=[3.5, 1]
             )
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         x = np.linspace(0, 1, self.instance.Nbins)
 
@@ -706,12 +775,20 @@ class TemplateVisualizer(Visualizer):
                 # Don't save the plot if this is a part of a bigger plot
                 pass
 
-    def plot_eigenvalues(
-        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
-    ):
+        return fig, ax
 
-        if ax is None:
+    def plot_eigenvalues(
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
+
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         x = np.arange(self.instance.Nbins)
 
@@ -744,6 +821,8 @@ class TemplateVisualizer(Visualizer):
                 ticklabel.set_color("grey")
                 ticklabel.set_fontsize(7)
 
+        return fig, ax
+
     def plot_systematic_overview(self, save: bool = False, filename: str = ""):
 
         # gridspec inside gridspec
@@ -752,22 +831,22 @@ class TemplateVisualizer(Visualizer):
         gs = mpl.gridspec.GridSpec(2, 6, wspace=0.4, hspace=0.15)
 
         ax0 = fig.add_subplot(gs[0, 0:4])
-        self.plot_nominal_template(ax0)
+        self.plot_nominal_template(fig=fig, ax=ax0)
 
         self.annotate_matrix_plot(ax0)
 
         ax01 = fig.add_subplot(gs[0, 4:6])
         # self.plot_eigenvalues(ax01)
-        self.plot_relative_variations_in_grid(ax01)
+        self.plot_relative_variations_in_grid(fig=fig, ax=ax01)
 
         ax1 = fig.add_subplot(gs[1, :3])
-        self.plot_corr_matrix(ax1)
+        self.plot_corr_matrix(fig=fig, ax=ax1)
 
         gs_low = gs[1, 3:].subgridspec(2, 1, height_ratios=[3.5, 1], hspace=0.1)
         ax2 = fig.add_subplot(gs_low[0, 0])
         ax2.set_xticks([])
         ax3 = fig.add_subplot(gs_low[1, 0])
-        self.plot_up_and_down_variations(np.array([ax2, ax3]))
+        self.plot_up_and_down_variations(fig=fig, ax=np.array([ax2, ax3]))
 
         if save:
             self.instance.saving_info["namespace"] = ["systematics", "overview"]
@@ -780,9 +859,9 @@ class FFModelVisualizer(Visualizer):
     def __init__(self, instance: FFModel):
         super().__init__(instance)
 
-    def annotate_matrix_plot(self, ax: Axes):
+    def annotate_matrix_plot(self, ax: plt.Axes):
 
-        if isinstance(ax, Axes):
+        if isinstance(ax, plt.Axes):
             self._annotate_axis(ax)
         elif isinstance(ax, np.ndarray):
             for axis in ax:
@@ -803,11 +882,17 @@ class FFModelVisualizer(Visualizer):
         )
 
     def plot_cov_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         sns.heatmap(
             self.instance.cov_matrix,
@@ -823,14 +908,20 @@ class FFModelVisualizer(Visualizer):
             self.instance.saving_info["namespace"] = ["ff_model", "cov_matrix"]
             self.save_figure(fig, filename)
 
-        return ax
+        return fig, ax
 
     def plot_corr_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         sns.heatmap(
             self.instance.corr_matrix,
@@ -858,14 +949,20 @@ class FFModelVisualizer(Visualizer):
             self.instance.saving_info["namespace"] = ["ff_model", "corr_matrix"]
             self.save_figure(fig, filename)
 
-        return ax
+        return fig, ax
 
     def plot_params(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("You must provide both fig and ax or none of them.")
 
         ax.errorbar(
             x=np.arange(self.instance.num_params) + 0.5,
@@ -901,15 +998,15 @@ class FFModelVisualizer(Visualizer):
             self.instance.saving_info["namespace"] = ["ff_model", "params"]
             self.save_figure(fig, filename)
 
-        return ax
+        return fig, ax
 
     def plot_corr_and_params(self, save: bool = False, filename: str = ""):
 
         fig, ax = plt.subplots(1, 2, figsize=(16, 4.5), dpi=DPI)
 
-        self.plot_params(ax[0])
+        self.plot_params(fig=fig, ax=ax[0])
 
-        self.plot_corr_matrix(ax[1])
+        self.plot_corr_matrix(fig=fig, ax=ax[1])
         self.annotate_matrix_plot(ax[1])
         if save:
             self.instance.saving_info["namespace"] = [
@@ -928,9 +1025,9 @@ class EigenDecomposerVisualizer(Visualizer):
     def plot_cov_matrix(self):
         pass
 
-    def annotate_matrix_plot(self, ax: Axes):
+    def annotate_matrix_plot(self, ax: plt.Axes):
 
-        if isinstance(ax, Axes):
+        if isinstance(ax, plt.Axes):
             self._annotate_axis(ax)
         elif isinstance(ax, np.ndarray):
             for axis in ax:
@@ -942,11 +1039,17 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.set_ylabel("Templates/Bins")
 
     def plot_corr_matrix(
-        self, ax: Axes | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("Need to provide both fig and ax (or none).")
 
         sns.heatmap(
             self.instance.corr,
@@ -962,14 +1065,20 @@ class EigenDecomposerVisualizer(Visualizer):
             self.instance.saving_info["namespace"] = ["egd", "corr", "matrix"]
             self.save_figure(fig, filename)
 
-        return ax
+        return fig, ax
 
     def plot_eigenvalues(
-        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
-    ):
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
 
-        if ax is None:
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("Need to provide both fig and ax (or none).")
 
         x = np.arange(self.instance.eigen_values.shape[0])
 
@@ -996,7 +1105,7 @@ class EigenDecomposerVisualizer(Visualizer):
         ax_right = ax.twinx()
 
         # FIXME this is wrong and misleading.
-        # The two axes are not aligned
+        # The two ax are not aligned
         ax_right.plot(
             x,
             self.instance.max_differences / self.instance.cov.max(),
@@ -1007,12 +1116,20 @@ class EigenDecomposerVisualizer(Visualizer):
         ax_right.set_yscale("log")
         ax_right.set_ylabel(r"max($\frac{|Cov - Cov^{'}|}{Cov}$)", color="#07529aff")
 
-    def plot_cov_diff(
-        self, ax: np.ndarray | None = None, save: bool = False, filename: str = ""
-    ):
+        return fig, ax
 
-        if ax is None:
+    def plot_cov_diff(
+        self,
+        fig: plt.Figure | None = None,
+        ax: plt.Axes | None = None,
+        save: bool = False,
+        filename: str = "",
+    ) -> tuple[plt.Figure, plt.Axes]:
+
+        if fig is None and ax is None:
             fig, ax = plt.subplots(figsize=(8, 5), dpi=DPI)
+        elif fig is None or ax is None:
+            raise ValueError("Need to provide both fig and ax (or none).")
 
         total_N_eigendirections = self.instance.eigen_values.shape[0]
         x = np.arange(len(self.instance.max_differences))
@@ -1039,9 +1156,11 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.fill_between(
             [-10, x[-1]], self.instance.precision, 1, alpha=0.5, color="#07529aff"
         )
+
         if save:
             self.instance.saving_info["namespace"] = ["egd", "cov", "diff"]
             self.save_figure(fig, filename)
+        return fig, ax
 
 
 def get_latex_symbol(key):
