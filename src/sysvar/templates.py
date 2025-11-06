@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from pandas import DataFrame, concat
+import matplotlib.pyplot as plt
 
 from sysvar.corrections import *
 from sysvar.variations import Variator
@@ -493,15 +494,25 @@ class Template(ABC, SavableAttributesObject):
         self.visualizer = TemplateVisualizer(self)
         self.visualizer.plot_systematic_overview(save=save, filename=filename)
 
-    def plot_relative_variations_in_grid(self, save: bool = False, filename: str = ""):
+    def plot_relative_variations_in_grid(
+        self, save: bool = False, filename: str = ""
+    ) -> tuple[plt.Figure, plt.Axes]:
 
         self.visualizer = TemplateVisualizer(self)
-        self.visualizer.plot_relative_variations_in_grid(save=save, filename=filename)
+        fig, ax = self.visualizer.plot_relative_variations_in_grid(
+            save=save, filename=filename
+        )
+        return fig, ax
 
-    def plot_up_and_down_variations(self, save: bool = False, filename: str = ""):
+    def plot_up_and_down_variations(
+        self, save: bool = False, filename: str = ""
+    ) -> tuple[plt.Figure, plt.Axes]:
 
         self.visualizer = TemplateVisualizer(self)
-        self.visualizer.plot_up_and_down_variations(save=save, filename=filename)
+        fig, ax = self.visualizer.plot_up_and_down_variations(
+            save=save, filename=filename
+        )
+        return fig, ax
 
 
 class Template1D(Template):

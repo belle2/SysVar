@@ -435,11 +435,13 @@ class EigenDecomposer(ChannelTemplateHandler):
     def plot_cov_diff(self, save: bool = False, filename: str = ""):
 
         self.visualizer = EigenDecomposerVisualizer(self)
-        self.visualizer.plot_cov_diff(save=save, filename=filename)
+        fig, ax = self.visualizer.plot_cov_diff(save=save, filename=filename)
+        return fig, ax
 
     def plot_corr_matrix(self, save: bool = False, filename: str = ""):
         self.visualizer = EigenDecomposerVisualizer(self)
-        self.visualizer.plot_corr_matrix(save=save, filename=filename)
+        fig, ax = self.visualizer.plot_corr_matrix(save=save, filename=filename)
+        return fig, ax
 
 
 class ExistingEigenVariationsSaver(ChannelTemplateHandler):
