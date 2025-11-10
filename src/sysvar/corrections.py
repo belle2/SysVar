@@ -346,6 +346,92 @@ class BaseCorrectionFromYaml(BaseCorrection):
         return path.join(self.table_dir, filename)
 
 
+@dataclass()
+class BaseCorrectionFromCSV(BaseCorrection):
+    """
+    CSV-driven base class that standardizes reading corrections (central values and
+    uncertainties) from a single, long-form CSV file.
+
+    The CSV is expected to contain at least:
+      - 'central_value'
+    Optional uncertainty columns (if present they are auto-mapped):
+      - 'stat_corr', 'sys_corr'    -> fully_correlated
+      - 'stat_uncorr', 'sys_uncorr'-> uncorrelated
+    Optional extra metadata columns that 1D/2D specializations will use:
+      - 'dependant_variable' or 'dependant_variable_1' and 'dependant_variable_2'
+      - '{var}_unit', '{var}_min', '{var}_max' for each dependant variable
+    """
+
+    csv_path: str | None = None
+    title: str | None = None
+
+    def __post_init__(self):
+        super().__init__()
+        if self.csv_path is None:
+            raise MissingInformationError(
+                "csv_path must be provided when using BaseCorrectionFromCSV."
+            )
+
+        self.table = read_csv(self.csv_path)
+        if self.table is None or len(self.table) == 0:
+            raise ValueError(f"No data found in CSV at {self.csv_path}")
+
+        # Keep parity with YAML-driven classes
+        self.cov_matrix = None
+        self.info = self._build_info_from_table()
+        # Title fallback to filename if not provided
+        self.title = self.title if isinstance(self.title, str) else path.basename(self.csv_path)
+
+    def _build_info_from_table(self) -> dict:
+        """
+        Build a lightweight info dictionary compatible with BaseCorrection.populate_uncertainties.
+        """
+        uncertainties: dict = {}
+
+        # Map present columns to correlation types
+        corr_map = {
+            "fully_correlated": [],
+            "uncorrelated": [],
+        }
+
+        if "stat_corr" in self.table:
+            values = self.table["stat_corr"].tolist()
+            if not any(np.isnan(values)) and not any(np.isinf(values)):
+                corr_map["fully_correlated"].append(("stat_corr", values))
+
+        if "sys_corr" in self.table:
+            values = self.table["sys_corr"].tolist()
+            if not any(np.isnan(values)) and not any(np.isinf(values)):
+                corr_map["fully_correlated"].append(("sys_corr", values))
+
+        if "stat_uncorr" in self.table:
+            values = self.table["stat_uncorr"].tolist()
+            if not any(np.isnan(values)) and not any(np.isinf(values)):
+                corr_map["uncorrelated"].append(("stat_uncorr", values))
+
+        if "sys_uncorr" in self.table:
+            values = self.table["sys_uncorr"].tolist()
+            if not any(np.isnan(values)) and not any(np.isinf(values)):
+                corr_map["uncorrelated"].append(("sys_uncorr", values))
+
+        # Only create keys that have at least one uncertainty
+        for key, items in corr_map.items():
+            if len(items) > 0:
+                uncertainties[key] = {name: values for name, values in items}
+
+        # Minimal info required by BaseCorrection.populate_uncertainties
+        info = {
+            "uncertainties": uncertainties,
+            # Placeholder fields for downstream compatibility (may be unused)
+            "extra_cuts": None,
+        }
+        return info
+
+    def add_extra_cuts(self, queries: list, prefix: str | None) -> list:
+        # CSV-driven corrections do not currently support additional cuts.
+        return queries
+
+
 @dataclass
 class Correction1D(BaseCorrectionFromYaml):
 
@@ -424,6 +510,83 @@ class Correction1D(BaseCorrectionFromYaml):
         queries = self.add_extra_cuts(queries, prefix)
 
         return queries
+
+
+@dataclass
+class Correction1DFromCSV(BaseCorrectionFromCSV):
+    """
+    1D correction reader from a single CSV.
+    Expects columns:
+      - 'central_value'
+      - 'dependant_variable' or 'dependant_variable_1'
+      - '{var}_unit'
+      - '{var}_min', '{var}_max'
+    """
+
+    dependant_variable: str | None = None
+    central_values: Iterable = None
+    lower_bounds: Iterable = None
+    upper_bounds: Iterable = None
+    unit: str | None = None
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # Determine variable name and unit
+        if "dependant_variable" in self.table:
+            self.dependant_variable = str(self.table["dependant_variable"].iloc[0]).strip()
+        elif "dependant_variable_1" in self.table:
+            self.dependant_variable = str(self.table["dependant_variable_1"].iloc[0]).strip()
+        else:
+            raise ValueError(
+                "CSV must contain 'dependant_variable' or 'dependant_variable_1' column."
+            )
+
+        # Unit detection: prefer '{var}_unit', fallback to 'unit' or first '*_unit'
+        unit_col_candidates = [f"{self.dependant_variable}_unit", "unit"]
+        unit_col = next((c for c in unit_col_candidates if c in self.table.columns), None)
+        if unit_col is None:
+            # try any column ending with _unit
+            unit_cols = [c for c in self.table.columns if c.endswith("_unit")]
+            unit_col = unit_cols[0] if len(unit_cols) > 0 else None
+        self.unit = self.table[unit_col].iloc[0] if unit_col is not None else ""
+
+        min_col = f"{self.dependant_variable}_min"
+        max_col = f"{self.dependant_variable}_max"
+        if min_col not in self.table or max_col not in self.table:
+            raise ValueError(
+                f"CSV must contain '{min_col}' and '{max_col}' columns for bin edges."
+            )
+
+        self.lower_bounds = self.table[min_col].tolist()
+        self.upper_bounds = self.table[max_col].tolist()
+        self.central_values = self.table["central_value"].tolist()
+
+        # Populate uncertainties if discoverable
+        self.populate_uncertainties()
+
+    @property
+    def value_edges(self) -> np.ndarray:
+        return np.unique(np.concatenate((self.lower_bounds, self.upper_bounds)))
+
+    @property
+    def value_mids(self) -> np.ndarray:
+        return (self.value_edges[1:] + self.value_edges[:-1]) / 2
+
+    @property
+    def visual_labels(self) -> List[str]:
+        return [
+            f"{low} < {self.dependant_variable} < {up} {self.unit}"
+            for low, up in zip(self.lower_bounds, self.upper_bounds)
+        ]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+        column_name = self._build_column_name(prefix, self.dependant_variable)
+        queries = [
+            f"{low} <= {column_name} < {up}"
+            for low, up in zip(self.lower_bounds, self.upper_bounds)
+        ]
+        return self.add_extra_cuts(queries, prefix)
 
 
 @dataclass
@@ -536,6 +699,81 @@ class Correction2D(BaseCorrectionFromYaml):
                 unc_values=unc_values,
                 unc_obj=sysvar_uncertainties[unc_ctgy],
             )
+
+
+@dataclass
+class Correction2DFromCSV(BaseCorrectionFromCSV):
+    """
+    2D correction reader from a single CSV.
+    Expects columns:
+      - 'central_value'
+      - 'dependant_variable_1', 'dependant_variable_2'
+      - '{var1}_unit', '{var2}_unit'
+      - '{var1}_min','{var1}_max','{var2}_min','{var2}_max'
+    """
+
+    dependant_variable_1: str | None = None
+    dependant_variable_2: str | None = None
+    unit_1: str | None = None
+    unit_2: str | None = None
+    central_values: Iterable = None
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if "dependant_variable_1" not in self.table or "dependant_variable_2" not in self.table:
+            raise ValueError(
+                "CSV must contain 'dependant_variable_1' and 'dependant_variable_2' columns."
+            )
+
+        self.dependant_variable_1 = str(self.table["dependant_variable_1"].iloc[0]).strip()
+        self.dependant_variable_2 = str(self.table["dependant_variable_2"].iloc[0]).strip()
+
+        # Units
+        unit1_col = f"{self.dependant_variable_1}_unit"
+        unit2_col = f"{self.dependant_variable_2}_unit"
+        self.unit_1 = self.table[unit1_col].iloc[0] if unit1_col in self.table else ""
+        self.unit_2 = self.table[unit2_col].iloc[0] if unit2_col in self.table else ""
+
+        # Edges
+        self._v1_min = f"{self.dependant_variable_1}_min"
+        self._v1_max = f"{self.dependant_variable_1}_max"
+        self._v2_min = f"{self.dependant_variable_2}_min"
+        self._v2_max = f"{self.dependant_variable_2}_max"
+        for c in (self._v1_min, self._v1_max, self._v2_min, self._v2_max):
+            if c not in self.table.columns:
+                raise ValueError(f"CSV must contain '{c}' column for 2D bin edges.")
+
+        self.central_values = self.table["central_value"].tolist()
+
+    @property
+    def iterator(self):
+        # Provide a generator over rows with unpacked bins
+        for _, row in self.table.iterrows():
+            yield (
+                row[self._v1_min],
+                row[self._v1_max],
+                row[self._v2_min],
+                row[self._v2_max],
+            )
+
+    @property
+    def visual_labels(self) -> List[str]:
+        return [
+            f"{v1min} <= {self.dependant_variable_1} < {v1max} {self.unit_1} & "
+            f"{v2min} <= {self.dependant_variable_2} < {v2max} {self.unit_2}"
+            for (v1min, v1max, v2min, v2max) in self.iterator
+        ]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+        column_name_1 = self._build_column_name(prefix, self.dependant_variable_1)
+        column_name_2 = self._build_column_name(prefix, self.dependant_variable_2)
+        queries = [
+            f"{v1min} <= {column_name_1} < {v1max} & "
+            f"{v2min} <= {column_name_2} < {v2max}"
+            for (v1min, v1max, v2min, v2max) in self.iterator
+        ]
+        return self.add_extra_cuts(queries, prefix)
 
 
 @dataclass
