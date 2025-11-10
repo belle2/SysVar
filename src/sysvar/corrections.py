@@ -746,6 +746,8 @@ class Correction2DFromCSV(BaseCorrectionFromCSV):
 
         self.central_values = self.table["central_value"].tolist()
 
+        self.populate_uncertainties()
+
     @property
     def iterator(self):
         # Provide a generator over rows with unpacked bins
