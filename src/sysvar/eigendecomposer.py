@@ -33,22 +33,67 @@ class EigenDecomposer(ChannelTemplateHandler):
         self,
         df: DataFrame,
         settings: dict,
-        syst_effect: str | dict | None,
+        syst_effect: str | dict | None = None,
         verbose: bool = True,
         seed: int = 8311311,
     ):
+        """
+        Initialize an EigenDecomposer for systematic uncertainty analysis.
+
+        Args:
+            df (DataFrame): The input dataframe containing the data to be analyzed.
+            settings (dict): Configuration settings containing analysis parameters.
+            syst_effect (str | dict | None, optional): Systematic effect identifier for YAML-based corrections.
+                Can be a string (systematic name) or dict (custom correction). 
+                Required if csv_path is not provided.
+            verbose (bool, optional): Whether to enable verbose logging. Defaults to True.
+            csv_path (str | None, optional): Path to CSV file for CSV-based corrections.
+                If provided, syst_effect is ignored.
+            csv_type (str | None, optional): Type of CSV correction ("1D" or "2D").
+                If not provided, will be auto-detected from CSV structure.
+            title (str | None, optional): Custom title for CSV-based corrections.
+                If not provided, will use the CSV filename.
+
+        Raises:
+            ValueError: If neither syst_effect nor csv_path is provided, or if invalid types are passed.
+
+        Examples:
+            >>> # YAML-based correction
+            >>> decomposer = EigenDecomposer(df, settings, syst_effect="track_eff")
+            
+            >>> # CSV-based correction  
+            >>> decomposer = EigenDecomposer(df, settings, csv_path="corrections/track_eff.csv")
+            
+        """
 
         super().__init__(df, settings, verbose)
 
-        if isinstance(syst_effect, dict):
-            self._syst_effect = syst_effect["name"]
-        elif isinstance(syst_effect, str):
-            self._syst_effect = syst_effect
-        elif syst_effect is None:
-            ValueError("syst_effect must be a string or a dict but you pass None")
+        # Handle CSV-based corrections
+        if csv_path is not None:
+            self._syst_effect = title if title is not None else path.basename(csv_path).replace('.csv', '')
+            self.correction = create_correction_object(
+                syst_effect=None,
+                MC_prod=None,
+                csv_path=csv_path,
+                csv_type=csv_type,
+                title=title
+            )
+        # Handle YAML-based corrections
+        elif syst_effect is not None:
+            if isinstance(syst_effect, dict):
+                self._syst_effect = syst_effect["name"]
+            elif isinstance(syst_effect, str):
+                self._syst_effect = syst_effect
+            else:
+                raise ValueError(
+                    f"syst_effect must be a string or a dict but you passed {type(syst_effect)}"
+                )
+            
+            self.correction = create_correction_object(syst_effect, settings["MC_prod"])
         else:
-            ValueError(
-                f"syst_effect must be a string or a dict but you pass {type(syst_effect)}"
+            raise ValueError(
+                "Either syst_effect or csv_path must be provided. "
+                "Use syst_effect for YAML-based corrections or csv_path for CSV-based corrections."
             )
 
         self.correction = create_correction_object(syst_effect, settings["MC_prod"])

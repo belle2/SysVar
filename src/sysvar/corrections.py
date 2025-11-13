@@ -376,7 +376,6 @@ class BaseCorrectionFromCSV(BaseCorrection):
         if self.table is None or len(self.table) == 0:
             raise ValueError(f"No data found in CSV at {self.csv_path}")
 
-        # Keep parity with YAML-driven classes
         self.cov_matrix = None
         self.info = self._build_info_from_table()
         # Title fallback to filename if not provided
@@ -562,7 +561,6 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
         self.upper_bounds = self.table[max_col].tolist()
         self.central_values = self.table["central_value"].tolist()
 
-        # Populate uncertainties if discoverable
         self.populate_uncertainties()
 
     @property
@@ -1179,22 +1177,31 @@ class CorrectionPID(BaseCorrectionFromYaml):
 
 
 def create_correction_object(
-    syst_effect: str | dict | None, MC_prod: str
+    syst_effect: str | dict | None, MC_prod: str | None = None, csv_path: str | None = None, csv_type: str | None = None, title: str | None = None
 ) -> BaseCorrection:
-    """Retrieves amd creates the appropriate correction object based on the systematic effect and MC production type.
+    """Retrieves and creates the appropriate correction object based on the systematic effect and MC production type.
 
     Args:
-        syst_effect (str): The systematic effect identifier.
-        MC_prod (str): The Monte Carlo production type identifier.
+        syst_effect (str): The systematic effect identifier for YAML-based corrections, or CSV file path for CSV-based corrections.
+        MC_prod (str, optional): The Monte Carlo production type identifier. Required for YAML-based corrections.
+        csv_path (str, optional): Path to CSV file for CSV-based corrections. If provided, syst_effect is ignored.
+        csv_type (str, optional): Type of CSV correction ("1D" or "2D"). If not provided, will be inferred from CSV structure.
+        title (str, optional): Title for CSV-based corrections. If not provided, will use filename.
 
     Returns:
         BaseCorrection: The appropriate correction object based on the provided systematic effect and MC production type.
 
     Raises:
         NotImplementedError: If the correction type specified in the configuration is not implemented.
+        ValueError: If invalid combination of arguments is provided.
 
     Example:
-        >>> correction = get_correction_object("syst1", "MC1")
+        >>> # YAML-based correction
+        >>> correction = create_correction_object("syst1", "MC1")
+        >>> isinstance(correction, BaseCorrection)
+        True
+        >>> # CSV-based correction
+        >>> correction = create_correction_object(csv_path="path/to/file.csv", csv_type="1D")
         >>> isinstance(correction, BaseCorrection)
         True
     """
@@ -1205,8 +1212,43 @@ def create_correction_object(
         "BF": CorrectionBF,
         "PID": CorrectionPID,
     }
+    
+    csv_correction_types = {
+        "1D": Correction1DFromCSV,
+        "2D": Correction2DFromCSV,
+    }
 
-    if isinstance(syst_effect, str):
+    # Handle CSV-based corrections
+    if csv_path is not None:
+        if not path.exists(csv_path):
+            raise ValueError(f"CSV file not found: {csv_path}")
+        
+        # Determine correction type from CSV structure if not provided
+        if csv_type is None:
+            # Read CSV to determine type based on columns
+            try:
+                test_table = read_csv(csv_path)
+                if "dependant_variable_1" in test_table.columns and "dependant_variable_2" in test_table.columns:
+                    csv_type = "2D"
+                elif "dependant_variable" in test_table.columns or "dependant_variable_1" in test_table.columns:
+                    csv_type = "1D"
+                else:
+                    raise ValueError("Cannot determine CSV correction type from columns. Please specify csv_type.")
+            except Exception as e:
+                raise ValueError(f"Error reading CSV file {csv_path}: {e}")
+        
+        if csv_type not in csv_correction_types:
+            raise NotImplementedError(
+                f"Available CSV correction types are: {list(csv_correction_types.keys())} but you passed {csv_type}"
+            )
+        
+        return csv_correction_types[csv_type](csv_path=csv_path, title=title)
+
+    # Handle YAML-based corrections
+    elif isinstance(syst_effect, str):
+        if MC_prod is None:
+            raise ValueError("MC_prod is required for YAML-based corrections")
+            
         corr_type = read_yaml(syst_effect, MC_prod)["correction_type"]
 
         try:
@@ -1217,12 +1259,15 @@ def create_correction_object(
             raise NotImplementedError(
                 f"Available corrections are: {list(correction_types.keys())} but you passed {corr_type}"
             )
+    
+    # Handle custom corrections
     elif isinstance(syst_effect, dict):
         return CustomCorrection(info=syst_effect)
 
     else:
         raise ValueError(
-            "Pass a string for existing standard systematic to create a correction object from yaml files or a dictionary to create a custom correction object"
+            "Pass a string for existing standard systematic to create a correction object from yaml files, "
+            "a dictionary to create a custom correction object, or provide csv_path for CSV-based corrections"
         )
 
 
