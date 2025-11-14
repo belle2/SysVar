@@ -1,0 +1,155 @@
+import pytest
+
+from sysvar.api import (
+    plot_analysis_corr_matrix,
+    plot_cov_diff,
+    plot_up_and_down_variations,
+    plot_templates_relative_variations_in_grid,
+    plot_correction_cov_and_corr,
+    plot_correction_variations_in_grid,
+    plot_correction_errors,
+    add_weights_to_dataframe,
+    eigendecompose,
+)
+
+from sysvar.eigendecomposer import EigenDecomposer
+from sysvar.utils import read_yaml
+import numpy as np
+
+
+@pytest.fixture
+def dummy_eigendecomposer(toy_df):
+    settings = read_yaml("study_setup", "sysvar_101")
+    syst_effect = "charged_slow_pi"
+
+    egd = EigenDecomposer(toy_df, settings, syst_effect, verbose=False)
+    egd.vary_templates()
+    egd.precision = 1e-4
+    egd.find_important_eigendimension_indices("max_differences")
+
+    return egd
+
+
+@pytest.mark.parametrize(
+    "plot_method",
+    [
+        plot_analysis_corr_matrix,
+        plot_cov_diff,
+        plot_up_and_down_variations,
+        plot_templates_relative_variations_in_grid,
+        plot_correction_cov_and_corr,
+        plot_correction_variations_in_grid,
+        plot_correction_errors,
+    ],
+)
+def test_visualize_functions_run_without_errors(plot_method, dummy_eigendecomposer):
+    plot_method(dummy_eigendecomposer, save=False)
+
+
+def test_add_weights_to_dataframe_overwrite_and_variations(toy_df):
+    df = toy_df.copy()
+    column_name = "slow_pi_charged_weight"
+
+    # Ensure the base column exists from fixture setup
+    assert column_name in df.columns
+
+    # Set a sentinel value and verify non-overwrite keeps it
+    df[column_name] = 42.0
+    add_weights_to_dataframe(
+        df=df,
+        systematic="charged_slow_pi",
+        MC_production="sysvar_101",
+        prefix="slow_pi",
+        weightname="charged_weight",
+        overwrite=False,
+    )
+    assert (df[column_name] == 42.0).all()
+
+    # Overwrite and request two variation columns
+    add_weights_to_dataframe(
+        df=df,
+        systematic="charged_slow_pi",
+        MC_production="sysvar_101",
+        prefix="slow_pi",
+        weightname="charged_weight",
+        overwrite=True,
+        Nvar=2,
+    )
+
+    # Values should have been updated from the sentinel
+    assert (df[column_name] != 42.0).any()
+
+    # Variation columns should exist and be populated
+    for j in range(2):
+        vcol = f"{column_name}_var_{j}"
+        assert vcol in df.columns
+        assert df[vcol].notna().all()
+
+
+def test_add_weights_to_dataframe_negative_Nvar_raises(toy_df):
+    df = toy_df.copy()
+    with pytest.raises(ValueError):
+        add_weights_to_dataframe(
+            df=df,
+            systematic="charged_slow_pi",
+            MC_production="sysvar_101",
+            prefix="slow_pi",
+            weightname="charged_weight",
+            Nvar=-1,
+        )
+
+
+def test_eigendecompose_runs_and_sets_properties(
+    toy_df, dummy_eigendecomposer
+):
+    settings = read_yaml("study_setup", "sysvar_101")
+    prc = 1e-3
+
+    egd = eigendecompose(
+        df=toy_df,
+        settings=settings,
+        syst_effect="charged_slow_pi",
+        criterion="max_differences",
+        prc=prc,
+        save_variations=False,
+        save_channel_covariance_matrices=False,
+        verbose=False,
+    )
+
+    assert isinstance(egd, EigenDecomposer)
+    assert egd.precision == prc
+
+    # Baseline comparisons against dummy instance (ensures consistent setup)
+    assert egd.syst_effect == dummy_eigendecomposer.syst_effect
+    assert set(egd.templates.keys()) == set(
+        dummy_eigendecomposer.templates.keys()
+    )
+
+    # important dims should be computed and be a boolean array
+    assert hasattr(egd, "important_dims_indices")
+    assert isinstance(egd.important_dims_indices, np.ndarray)
+    assert egd.important_dims_indices.dtype == bool
+    assert egd.N_important_dims >= 1
+
+    # templates should exist and have eigen information accessible
+    assert len(egd.templates) > 0
+    for name, t in egd.templates.items():
+        # Access properties to ensure they are computable
+        vals = t.eigen_values
+        vecs = t.eigen_vectors
+        vars_ = t.eigen_variations
+        assert isinstance(vals, np.ndarray) and vals.size > 0
+        assert isinstance(vecs, np.ndarray) and vecs.size > 0
+        assert isinstance(vars_, np.ndarray) and vars_.size > 0
+
+
+def test_eigendecompose_invalid_criterion_raises(toy_df):
+    settings = read_yaml("study_setup", "sysvar_101")
+    with pytest.raises(NotImplementedError):
+        eigendecompose(
+            df=toy_df,
+            settings=settings,
+            syst_effect="charged_slow_pi",
+            criterion="not_a_method",
+            verbose=False,
+        )
