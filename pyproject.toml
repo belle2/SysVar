@@ -26,6 +26,7 @@ dependencies = [
     "particle",
     "PyYAML",
     "uproot",
+    "scikit-learn",
 ]
 
 [tool.uv]
