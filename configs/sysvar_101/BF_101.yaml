@@ -1,0 +1,26 @@
+correction_type: "BF"
+correlation: uncorrelated 
+
+dependant_variable: dmID
+
+mother_particle: 211 #For visualization purposes, this is the PDG ID of the mother particle in decay chain
+title: "SysVar 101 Branching fraction"
+
+extra_cuts:
+
+modes:
+
+  Signal_decay_1:
+    dmID: [11]
+    daughters:
+      - [211] #For visualization purposes, this is the PDG IDs of the daughters of the mother particle. 
+    pdg_live: [0.53, 1.0E-02]
+    decay_dec: 0.55
+
+  Signal_decay_2:
+    dmID: [12]
+    daughters:
+      - [211]
+    pdg_live: [0.47, 1.1E-02]
+    decay_dec: 0.45
+

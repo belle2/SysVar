@@ -1,0 +1,15 @@
+/* Ensure equation numbers appear to the right and not above */
+div.math { 
+  overflow: visible !important; /* avoid clipping that can push numbers above */
+}
+
+div.math .eqno {
+  float: right;
+  margin-left: 0.5em;
+}
+
+/* MathJax v3 containers can clip by default in RTD theme */
+mjx-container[jax="CHTML"][display="true"] {
+  overflow: visible !important;
+}
+

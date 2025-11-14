@@ -1,0 +1,20 @@
+correction_type: 1D
+
+dependant_variable: p # This has to be the name of the basf2 variable
+unit: GeV
+title: $\mathrm{\pi^{+}_{s}}$
+
+min: [0.05, 0.12, 0.16]
+max: [0.12, 0.16, 0.2]
+corrections: [0.977, 0.989, 0.943]
+
+uncertainties:
+  fully_correlated:
+    stat_corr: [0.023, 0.023, 0.023]
+    sys: [0.0032, 0.0032, 0.0032]
+  uncorrelated:
+    stat_uncorr: [0.014, 0.011, 0.020]
+
+# The prefix will be added here
+extra_cuts:
+  PDG: [211, -211]

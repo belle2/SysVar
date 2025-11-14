@@ -92,8 +92,8 @@ class Variator(ABC, SavableAttributesObject):
         # or build the covariance matrix from the uncertainties
         else:
             if len(self.correction.uncertainties.values()) > 1:
-                return np.add(
-                    *[unc.cov_matrix for unc in self.correction.uncertainties.values()]
+                return np.sum(
+                    [unc.cov_matrix for unc in self.correction.uncertainties.values()], axis=0
                 )
             else:
                 return next(iter(self.correction.uncertainties.values())).cov_matrix

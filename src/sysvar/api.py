@@ -214,9 +214,9 @@ def plot_up_and_down_variations(
 
     figures = []
 
-    for t in eigendecomposer_obj.templates.values():
-        t.register_saving_info(eigendecomposer_obj.saving_info)
-        fig, ax = t.plot_up_and_down_variations(save=save, filename=filename)
+    for t_name, t_obj in eigendecomposer_obj.templates.items():
+        t_obj.register_saving_info(eigendecomposer_obj.saving_info)
+        fig, ax = t_obj.plot_up_and_down_variations(title=t_name, save=save, filename=filename)
         figures.append((fig, ax))
 
     return figures
@@ -229,9 +229,9 @@ def plot_templates_relative_variations_in_grid(
 ) -> List[tuple[plt.Figure, plt.Axes]]:
     figures = []
 
-    for t in eigendecomposer_obj.templates.values():
-        t.register_saving_info(eigendecomposer_obj.saving_info)
-        fig, ax = t.plot_relative_variations_in_grid(save=save, filename=filename)
+    for t_name, t_obj in eigendecomposer_obj.templates.items():
+        t_obj.register_saving_info(eigendecomposer_obj.saving_info)
+        fig, ax = t_obj.plot_relative_variations_in_grid(title=t_name, save=save, filename=filename)
         figures.append((fig, ax))
 
     return figures
