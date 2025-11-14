@@ -360,6 +360,10 @@ class BaseCorrectionFromCSV(BaseCorrection):
     Optional extra metadata columns that 1D/2D specializations will use:
       - 'dependant_variable' or 'dependant_variable_1' and 'dependant_variable_2'
       - '{var}_unit', '{var}_min', '{var}_max' for each dependant variable
+    Optional extra cut columns for automatic query enhancement:
+      - 'PDG': PDG codes as strings in format "[521,-521]" or "[521]"
+      - 'mcPDG': MC truth PDG codes as strings in format "[521,-521]" or "[521]"
+      Note: Only string format like "[521,-521]" is supported.
     """
 
     csv_path: str | None = None
@@ -378,7 +382,6 @@ class BaseCorrectionFromCSV(BaseCorrection):
 
         self.cov_matrix = None
         self.info = self._build_info_from_table()
-        # Title fallback to filename if not provided
         self.title = self.title if isinstance(self.title, str) else path.basename(self.csv_path)
 
     def _build_info_from_table(self) -> dict:
@@ -387,7 +390,6 @@ class BaseCorrectionFromCSV(BaseCorrection):
         """
         uncertainties: dict = {}
 
-        # Map present columns to correlation types
         corr_map = {
             "fully_correlated": [],
             "uncorrelated": [],
@@ -413,21 +415,63 @@ class BaseCorrectionFromCSV(BaseCorrection):
             if not any(np.isnan(values)) and not any(np.isinf(values)):
                 corr_map["uncorrelated"].append(("sys_uncorr", values))
 
-        # Only create keys that have at least one uncertainty
         for key, items in corr_map.items():
             if len(items) > 0:
                 uncertainties[key] = {name: values for name, values in items}
 
-        # Minimal info required by BaseCorrection.populate_uncertainties
         info = {
             "uncertainties": uncertainties,
-            # Placeholder fields for downstream compatibility (may be unused)
             "extra_cuts": None,
         }
         return info
 
     def add_extra_cuts(self, queries: list, prefix: str | None) -> list:
-        # CSV-driven corrections do not currently support additional cuts.
+        """
+        Add extra cuts to queries based on PDG and mcPDG columns if they exist.
+        Only supports string format like "[521,-521]" or "[521]".
+        
+        Args:
+            queries (list): List of query strings to modify
+            prefix (str | None): Prefix to add to column names
+            
+        Returns:
+            list: Modified queries with extra cuts applied
+        """
+        pdg_cols_to_check = ["PDG", "mcPDG"]
+        
+        for row_idx, query in enumerate(queries):
+            extra_conditions = []
+            
+            for col in pdg_cols_to_check:
+                if col in self.table.columns:
+                    # Get the PDG values for this row
+                    pdg_values = self.table[col].iloc[row_idx]
+                    
+                    # Only handle string format like "[521,-521]"
+                    if isinstance(pdg_values, str) and pdg_values.startswith('[') and pdg_values.endswith(']'):
+                        try:
+                            # Remove brackets and split by comma
+                            values_str = pdg_values.strip('[]')
+                            if values_str.strip():  # Check if not empty
+                                pdg_list = [int(x.strip()) for x in values_str.split(',')]
+                            else:
+                                continue  # Skip if empty list
+                        except (ValueError, AttributeError):
+                            continue  # Skip if parsing fails
+                    else:
+                        continue  # Skip if not in expected string format
+                    
+                    column_name = self._build_column_name(prefix, col)
+                    
+                    if len(pdg_list) == 1:
+                        extra_conditions.append(f"{column_name} == {pdg_list[0]}")
+                    elif len(pdg_list) > 1:
+                        extra_conditions.append(f"{column_name} in {pdg_list}")
+            
+            if extra_conditions:
+                modified_query = f"({query}) & ({' & '.join(extra_conditions)})"
+                queries[row_idx] = modified_query
+        
         return queries
 
 
@@ -518,8 +562,10 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
     Expects columns:
       - 'central_value'
       - 'dependant_variable' or 'dependant_variable_1'
-      - '{var}_unit'
-      - '{var}_min', '{var}_max'
+      - '{var}_unit' (optional)
+      - Either: '{var}_min', '{var}_max' for bin edges (continuous bins)
+      - Or: column named '{var}' with discrete integer values (uses equality queries)
+
     """
 
     dependant_variable: str | None = None
@@ -527,6 +573,8 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
     lower_bounds: Iterable = None
     upper_bounds: Iterable = None
     unit: str | None = None
+    use_equality_queries: bool = False
+    variable_values: Iterable = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -541,49 +589,82 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
                 "CSV must contain 'dependant_variable' or 'dependant_variable_1' column."
             )
 
-        # Unit detection: prefer '{var}_unit', fallback to 'unit' or first '*_unit'
         unit_col_candidates = [f"{self.dependant_variable}_unit", "unit"]
         unit_col = next((c for c in unit_col_candidates if c in self.table.columns), None)
         if unit_col is None:
-            # try any column ending with _unit
             unit_cols = [c for c in self.table.columns if c.endswith("_unit")]
             unit_col = unit_cols[0] if len(unit_cols) > 0 else None
         self.unit = self.table[unit_col].iloc[0] if unit_col is not None else ""
 
         min_col = f"{self.dependant_variable}_min"
         max_col = f"{self.dependant_variable}_max"
-        if min_col not in self.table or max_col not in self.table:
+        
+        if min_col in self.table and max_col in self.table:
+            self.use_equality_queries = False
+            self.lower_bounds = self.table[min_col].tolist()
+            self.upper_bounds = self.table[max_col].tolist()
+        elif self.dependant_variable in self.table:
+            self.use_equality_queries = True
+            self.variable_values = self.table[self.dependant_variable].tolist()
+        else:
             raise ValueError(
-                f"CSV must contain '{min_col}' and '{max_col}' columns for bin edges."
+                f"CSV must contain either '{min_col}' and '{max_col}' columns for bin edges, "
+                f"or a '{self.dependant_variable}' column with discrete values."
             )
 
-        self.lower_bounds = self.table[min_col].tolist()
-        self.upper_bounds = self.table[max_col].tolist()
         self.central_values = self.table["central_value"].tolist()
 
         self.populate_uncertainties()
 
     @property
     def value_edges(self) -> np.ndarray:
-        return np.unique(np.concatenate((self.lower_bounds, self.upper_bounds)))
+        if self.use_equality_queries:
+            unique_vals = list(dict.fromkeys(self.variable_values))
+            return np.arange(len(unique_vals) + 1)
+        else:
+            return np.unique(np.concatenate((self.lower_bounds, self.upper_bounds)))
 
     @property
     def value_mids(self) -> np.ndarray:
-        return (self.value_edges[1:] + self.value_edges[:-1]) / 2
+        if self.use_equality_queries:
+            unique_vals = list(dict.fromkeys(self.variable_values))
+            return np.arange(len(unique_vals))
+        else:
+            return (self.value_edges[1:] + self.value_edges[:-1]) / 2
 
     @property
     def visual_labels(self) -> List[str]:
-        return [
-            f"{low} < {self.dependant_variable} < {up} {self.unit}"
-            for low, up in zip(self.lower_bounds, self.upper_bounds)
-        ]
+        label_col_candidates = [f"{self.dependant_variable}_label", "label"]
+        label_col = next((c for c in label_col_candidates if c in self.table.columns), None)
+        if label_col is None:
+            label_cols = [c for c in self.table.columns if c.endswith("_label")]
+            label_col = label_cols[0] if len(label_cols) > 0 else None
+        
+        if label_col is not None:
+            return self.table[label_col].tolist()
+        
+        if self.use_equality_queries:
+            return [
+                f"{self.dependant_variable} = {val} {self.unit}"
+                for val in self.variable_values
+            ]
+        else:
+            return [
+                f"{low} < {self.dependant_variable} < {up} {self.unit}"
+                for low, up in zip(self.lower_bounds, self.upper_bounds)
+            ]
 
     def build_queries(self, prefix: str | None = None) -> list:
         column_name = self._build_column_name(prefix, self.dependant_variable)
-        queries = [
-            f"{low} <= {column_name} < {up}"
-            for low, up in zip(self.lower_bounds, self.upper_bounds)
-        ]
+        
+        if self.use_equality_queries:
+            queries = [f"{column_name} == {val}" for val in self.variable_values]
+        else:
+            queries = [
+                f"{low} <= {column_name} < {up}"
+                for low, up in zip(self.lower_bounds, self.upper_bounds)
+            ]
+        
         return self.add_extra_cuts(queries, prefix)
 
 
