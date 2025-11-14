@@ -364,10 +364,13 @@ class BaseCorrectionFromCSV(BaseCorrection):
       - 'PDG': PDG codes as strings in format "[521,-521]" or "[521]"
       - 'mcPDG': MC truth PDG codes as strings in format "[521,-521]" or "[521]"
       Note: Only string format like "[521,-521]" is supported.
+    Optional explicit covariance matrix:
+      - 'cov_matrix_path': Path to file containing explicit covariance matrix
     """
 
     csv_path: str | None = None
     title: str | None = None
+    cov_matrix_path: str | None = None
 
     def __post_init__(self):
         super().__init__()
@@ -380,8 +383,18 @@ class BaseCorrectionFromCSV(BaseCorrection):
         if self.table is None or len(self.table) == 0:
             raise ValueError(f"No data found in CSV at {self.csv_path}")
 
-        self.cov_matrix = None
-        self.info = self._build_info_from_table()
+        # Handle explicit covariance matrix
+        if self.cov_matrix_path is not None:
+            if not path.exists(self.cov_matrix_path):
+                raise ValueError(f"Covariance matrix file not found: {self.cov_matrix_path}")
+            # Create a minimal info dict for load_covariance_matrix
+            cov_info = {"covariance_matrix": {"path": self.cov_matrix_path}}
+            self.cov_matrix = load_covariance_matrix(cov_info)
+            self.info = self._build_info_from_table()
+        else:
+            self.cov_matrix = None
+            self.info = self._build_info_from_table()
+            
         self.title = self.title if isinstance(self.title, str) else path.basename(self.csv_path)
 
     def _build_info_from_table(self) -> dict:
@@ -389,6 +402,15 @@ class BaseCorrectionFromCSV(BaseCorrection):
         Build a lightweight info dictionary compatible with BaseCorrection.populate_uncertainties.
         """
         uncertainties: dict = {}
+
+        # If explicit covariance matrix is provided, skip individual uncertainty columns
+        if self.cov_matrix is not None:
+            info = {
+                "uncertainties": {},
+                "extra_cuts": None,
+                "covariance_matrix": {"path": self.cov_matrix_path},
+            }
+            return info
 
         corr_map = {
             "fully_correlated": [],
@@ -1258,7 +1280,7 @@ class CorrectionPID(BaseCorrectionFromYaml):
 
 
 def create_correction_object(
-    syst_effect: str | dict | None, MC_prod: str | None = None, csv_path: str | None = None, csv_type: str | None = None, title: str | None = None
+    syst_effect: str | dict | None, MC_prod: str | None = None, csv_path: str | None = None, csv_type: str | None = None, title: str | None = None, cov_matrix_path: str | None = None
 ) -> BaseCorrection:
     """Retrieves and creates the appropriate correction object based on the systematic effect and MC production type.
 
@@ -1268,6 +1290,7 @@ def create_correction_object(
         csv_path (str, optional): Path to CSV file for CSV-based corrections. If provided, syst_effect is ignored.
         csv_type (str, optional): Type of CSV correction ("1D" or "2D"). If not provided, will be inferred from CSV structure.
         title (str, optional): Title for CSV-based corrections. If not provided, will use filename.
+        cov_matrix_path (str, optional): Path to explicit covariance matrix file for CSV-based corrections.
 
     Returns:
         BaseCorrection: The appropriate correction object based on the provided systematic effect and MC production type.
@@ -1283,6 +1306,10 @@ def create_correction_object(
         True
         >>> # CSV-based correction
         >>> correction = create_correction_object(csv_path="path/to/file.csv", csv_type="1D")
+        >>> isinstance(correction, BaseCorrection)
+        True
+        >>> # CSV-based correction with explicit covariance matrix
+        >>> correction = create_correction_object(csv_path="path/to/file.csv", cov_matrix_path="path/to/cov.txt")
         >>> isinstance(correction, BaseCorrection)
         True
     """
@@ -1323,7 +1350,7 @@ def create_correction_object(
                 f"Available CSV correction types are: {list(csv_correction_types.keys())} but you passed {csv_type}"
             )
         
-        return csv_correction_types[csv_type](csv_path=csv_path, title=title)
+        return csv_correction_types[csv_type](csv_path=csv_path, title=title, cov_matrix_path=cov_matrix_path)
 
     # Handle YAML-based corrections
     elif isinstance(syst_effect, str):
