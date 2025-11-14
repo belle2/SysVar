@@ -495,22 +495,22 @@ class Template(ABC, SavableAttributesObject):
         self.visualizer.plot_systematic_overview(save=save, filename=filename)
 
     def plot_relative_variations_in_grid(
-        self, save: bool = False, filename: str = ""
+        self, title: str = "", save: bool = False, filename: str = ""
     ) -> tuple[plt.Figure, plt.Axes]:
 
         self.visualizer = TemplateVisualizer(self)
         fig, ax = self.visualizer.plot_relative_variations_in_grid(
-            save=save, filename=filename
+            title=title, save=save, filename=filename
         )
         return fig, ax
 
     def plot_up_and_down_variations(
-        self, save: bool = False, filename: str = ""
+        self, title: str = "", save: bool = False, filename: str = ""
     ) -> tuple[plt.Figure, plt.Axes]:
 
         self.visualizer = TemplateVisualizer(self)
         fig, ax = self.visualizer.plot_up_and_down_variations(
-            save=save, filename=filename
+            title=title, save=save, filename=filename
         )
         return fig, ax
 

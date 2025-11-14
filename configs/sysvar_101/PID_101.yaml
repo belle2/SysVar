@@ -1,0 +1,17 @@
+correction_type: PID
+
+rate: eff
+momentum_unit: GeV
+title: SysVar 101 PID corrections
+
+momentum_variable: p
+theta_variable: theta
+PDG_variable: PDG
+mcPDG_variable: mcPDG
+
+# The prefix will be added here
+extra_cuts:
+
+online_cut: PIDcut > x.y
+
+table_paths: /path/to/your/table/generated/using/systematicsframework/

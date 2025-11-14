@@ -527,6 +527,7 @@ class TemplateVisualizer(Visualizer):
         self,
         fig: plt.Figure | None = None,
         ax: plt.Axes | None = None,
+        title: str = "",
         nbins: int = 11,
         save: bool = False,
         filename: str = "",
@@ -571,6 +572,7 @@ class TemplateVisualizer(Visualizer):
         ax.set_ylabel("Relative variation")
 
         ax.invert_yaxis()
+        ax.set_title(title)
 
         if save:
             self.instance.saving_info["namespace"] = [
@@ -700,6 +702,7 @@ class TemplateVisualizer(Visualizer):
         self,
         fig: plt.Figure | None = None,
         ax: List[plt.Axes] | None = None,
+        title: str = "",
         save: bool = False,
         filename: str = "",
     ) -> tuple[plt.Figure, plt.Axes]:
@@ -766,6 +769,8 @@ class TemplateVisualizer(Visualizer):
         ax[1].set_xlabel("Fitting variable")
         ax[1].set_ylim(0.01, 1)
         ax[1].set_yscale("log")
+
+        ax[0].set_title(title)
 
         if save:
             try:
@@ -1147,7 +1152,7 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.set_xlabel("Eigendirection")
 
         ax.annotate(
-            f"Keeping {self.instance.N_important_dims}/{total_N_eigendirections} eigendirections \n (first 50 considered only)",
+            f"Keeping {self.instance.N_important_dims}/{total_N_eigendirections} eigendirections \n (first 100 considered only)",
             (0.5, 0.5),
             xycoords="axes fraction",
             color="#eab90cff",

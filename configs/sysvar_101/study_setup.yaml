@@ -1,0 +1,41 @@
+
+output_filepath: ./test_output.root
+
+reco_channel_id_column: channel
+reco_channels:
+  channel1: [0]
+  channel2: [1]
+
+template_id_column: template
+templates:
+  - signal
+  - bkg
+
+total_weight: total_weight
+MC_prod: sysvar_101
+Nvar: 500
+
+bins:
+  channel1:
+    fit_variable1: [0, 0.2, 0.4, 0.6, 0.8, 1]
+    fit_variable2: [1, 2, 3, 4]
+  channel2:
+    fit_variable1: [0, 0.2, 0.4, 0.6, 0.8, 1]
+    fit_variable2: [1, 2, 3, 4]
+
+systematics:
+  charged_slow_pi:
+    weight: "charged_weight"
+    prefices: "slow_pi"
+    reco_channels:
+      include: ["channel1", "channel2"]
+      exclude:
+    templates: ["signal", "bkg"]
+
+  BF_101:
+    weight: "BF_weight"
+    prefices: "slow_pi"
+    reco_channels:
+      include: ["channel1", "channel2"]
+      exclude:
+    templates: ["signal"]
