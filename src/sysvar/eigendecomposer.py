@@ -107,7 +107,14 @@ class EigenDecomposer(ChannelTemplateHandler):
     def max_differences(self) -> list:
         total_N = len(self.eigen_vectors)
         max_n = min(total_N, 100)  # only need the first 100
+        n_start = 0  # Starting point for considering eigendirections when subtracting from the original covariance matrix
         running_cov = np.zeros_like(self.cov)
+        # If the first eigenvalue is zero then the eigendirection is also zero
+        # Completely skip this eigendirection but we still have to understand why this happens
+        if self.eigen_values[0]==0:
+            max_n = max_n - 1 # Consider one less eigendirection in total
+            n_start = 1 # skip the eigendirection that corresponds to 0 eigenvalue
+
         max_diffs = np.empty(max_n, dtype=float)
 
         logging.warning(
@@ -116,7 +123,7 @@ class EigenDecomposer(ChannelTemplateHandler):
             max_n,
         )
 
-        for i in tqdm(range(max_n), desc="Building partial covariances"):
+        for i in tqdm(range(n_start, max_n), desc="Building partial covariances"):
             # grab the i-th eigen-variation (shape: [n_features,])
             vec = self.eigen_variations[:, i]
 
