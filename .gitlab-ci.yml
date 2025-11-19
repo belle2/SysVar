@@ -2,9 +2,11 @@ stages:
   - uv-install
   # - pre-commit
   - test
+  - docs
 
 variables:
   PYTHON_VERSION: "3.11"
+  PANDOC_VERSION: "2.12"
   BASE_LAYER: bookworm
   UV_VERSION: "latest"
   ARTIFACTS_TEST_PATH: "junit/test-results.xml"
@@ -63,3 +65,22 @@ test:
       - junit/test-results.xml
       - coverage/
     expose_as: 'test result and coverage'
+
+docs:
+  stage: docs
+  only:
+    - merge_requests
+    - main
+  needs: [uv-install]
+  script:
+    - pip3 install -r docs/requirements.txt
+    - wget -P pandoc/ https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz
+    - tar -xvzf pandoc/*tar.gz -C pandoc/
+    - export PATH=$(pwd)/pandoc/pandoc-${PANDOC_VERSION}/bin:${PATH}
+    - sphinx-build docs/ docs-build/
+  artifacts:
+    paths:
+      - docs-build/
+    expire_in: 1 week
+    expose_as: 'sphinx documentation'
+    when: on_success
