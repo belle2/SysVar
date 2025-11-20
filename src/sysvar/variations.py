@@ -34,7 +34,7 @@ class Variator(ABC, SavableAttributesObject):
 
     """
 
-    def __init__(self, correction: BaseCorrection, Nvar: int = 20):
+    def __init__(self, correction: BaseCorrection, Nvar: int = 20, seed: int = 8311311):
         """
         Initialize a Variator with a correction object.
 
@@ -45,7 +45,7 @@ class Variator(ABC, SavableAttributesObject):
         super().__init__()
         self.correction = correction
         self.Nvar = Nvar
-        self._variations = self.get_correction_variations()
+        self._variations = self.get_correction_variations(seed=seed)
 
     @property
     def variations(self) -> np.ndarray:
@@ -93,7 +93,8 @@ class Variator(ABC, SavableAttributesObject):
         else:
             if len(self.correction.uncertainties.values()) > 1:
                 return np.sum(
-                    [unc.cov_matrix for unc in self.correction.uncertainties.values()], axis=0
+                    [unc.cov_matrix for unc in self.correction.uncertainties.values()],
+                    axis=0,
                 )
             else:
                 return next(iter(self.correction.uncertainties.values())).cov_matrix
@@ -118,7 +119,9 @@ class Variator(ABC, SavableAttributesObject):
             where=np.array(self.correction.central_values) != 0,
         )
 
-    def generate_variations(self, Nvar: int, covariance: np.ndarray) -> np.ndarray:
+    def generate_variations(
+        self, Nvar: int, covariance: np.ndarray, seed: int = 8311311
+    ) -> np.ndarray:
         """
         Generate variations based on a covariance matrix.
         This is using a standard multivariate normal.
@@ -131,13 +134,15 @@ class Variator(ABC, SavableAttributesObject):
             np.ndarray: An array of variations.
 
         """
+        rng = np.random.default_rng(seed)
+
         # Create a zero-ed matrix to get the dimensions right
         zeros = np.zeros(len(self.correction.central_values))
 
         # Generate the up or down variations based on a standard normal
-        return np.random.multivariate_normal(zeros, covariance, Nvar)
+        return rng.multivariate_normal(zeros, covariance, Nvar)
 
-    def get_correction_variations(self) -> np.ndarray:
+    def get_correction_variations(self, seed: int = 8311311) -> np.ndarray:
         """
         Get variations on the correction.
         This adds the generated variations from the total covariance matrix
@@ -151,11 +156,13 @@ class Variator(ABC, SavableAttributesObject):
 
         """
 
-        variations = self.generate_variations(self.Nvar, self.cov_matrix)
+        variations = self.generate_variations(self.Nvar, self.cov_matrix, seed=seed)
 
         return self.correction.central_values + variations
 
-    def get_variations_from_uncertainty(self, Nvar: int, name: str) -> np.ndarray:
+    def get_variations_from_uncertainty(
+        self, Nvar: int, name: str, seed: int = 8311311
+    ) -> np.ndarray:
         """
         Helper function to inspect variations coming from a single source of uncertainty.
         Creates new variations but likely this is okay as we're interested in examining
@@ -171,7 +178,7 @@ class Variator(ABC, SavableAttributesObject):
         """
 
         return self.generate_variations(
-            Nvar, self.correction.uncertainties[name].cov_matrix
+            Nvar, self.correction.uncertainties[name].cov_matrix, seed=seed
         )
 
     def plot_cov_and_corr(

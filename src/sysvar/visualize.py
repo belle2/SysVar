@@ -1145,6 +1145,15 @@ class EigenDecomposerVisualizer(Visualizer):
             linestyle="",
             marker=".",
             color="black",
+            label="Eigendirections considered",
+        )
+        ax.plot(
+            x[: self.instance.N_important_dims],
+            y[: self.instance.N_important_dims],
+            linestyle="",
+            marker=".",
+            color="red",
+            label="Kept eigendirections",
         )
 
         ax.set_yscale("log")
@@ -1152,15 +1161,23 @@ class EigenDecomposerVisualizer(Visualizer):
         ax.set_xlabel("Eigendirection")
 
         ax.annotate(
-            f"Keeping {self.instance.N_important_dims}/{total_N_eigendirections} eigendirections \n (first 100 considered only)",
+            f"Keeping {self.instance.N_important_dims}/{total_N_eigendirections} eigendirection"
+            + ("s" if self.instance.N_important_dims > 1 else "")
+            + " \n (first 100 considered only)",
             (0.5, 0.5),
             xycoords="axes fraction",
-            color="#eab90cff",
+            color="red",
         )
 
         ax.fill_between(
-            [-10, x[-1]], self.instance.precision, 1, alpha=0.5, color="#07529aff"
+            [-10, x[-1]],
+            self.instance.precision,
+            1,
+            alpha=0.5,
+            color="#07529aff",
+            label="Precision",
         )
+        ax.legend(loc="upper right")
 
         if save:
             self.instance.saving_info["namespace"] = ["egd", "cov", "diff"]

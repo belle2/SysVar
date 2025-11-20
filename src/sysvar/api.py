@@ -110,9 +110,11 @@ def eigendecompose(
     syst_effect: str,
     criterion: str = "max_differences",
     prc: float = 1e-4,
+    max_variations: int | None = None,
     save_variations: bool = False,
     save_channel_covariance_matrices: bool = False,
     verbose: bool = True,
+    seed: int = 8311311,
 ):
     """
     Performs eigendecomposition on the input DataFrame based on specified settings,
@@ -130,17 +132,20 @@ def eigendecompose(
         criterion (str, optional): Criterion for selecting important eigendimensions.
             Defaults to "max_differences".
         prc (float, optional): Precision level for the decomposition. Defaults to 1e-4.
+        max_variations (int | None, optional): Maximum number of variations to consider taking into account the precision criterion. If None, all variations up to the precision are considered. Defaults to None.
         save_variations (bool, optional): If True, saves template variations. Defaults to False.
         save_channel_covariance_matrices (bool, optional): If True, saves covariance matrices per channel. Defaults to False.
         verbose (bool, optional): If True, prints additional information during execution. Defaults to True.
+        seed (int, optional): Random seed for reproducibility. Defaults to 8311311.
 
     Returns:
         EigenDecomposer: An instance of the `EigenDecomposer` class containing the decomposition results.
     """
 
-    egd = EigenDecomposer(df, settings, syst_effect, verbose=verbose)
+    egd = EigenDecomposer(df, settings, syst_effect, verbose=verbose, seed=seed)
     egd.vary_templates()
     egd.precision = prc
+    egd.max_variations = max_variations
     egd.find_important_eigendimension_indices(criterion)
 
     if save_variations:

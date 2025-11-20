@@ -99,14 +99,13 @@ def test_add_weights_to_dataframe_negative_Nvar_raises(toy_df):
         )
 
 
-def test_eigendecompose_runs_and_sets_properties(
-    toy_df, dummy_eigendecomposer
-):
+def test_eigendecompose_runs_and_sets_properties(toy_df, dummy_eigendecomposer):
+    df = toy_df.copy()
     settings = read_yaml("study_setup", "sysvar_101")
     prc = 1e-3
 
     egd = eigendecompose(
-        df=toy_df,
+        df=df,
         settings=settings,
         syst_effect="charged_slow_pi",
         criterion="max_differences",
@@ -118,18 +117,17 @@ def test_eigendecompose_runs_and_sets_properties(
 
     assert isinstance(egd, EigenDecomposer)
     assert egd.precision == prc
+    assert egd.seed == 8311311
 
     # Baseline comparisons against dummy instance (ensures consistent setup)
     assert egd.syst_effect == dummy_eigendecomposer.syst_effect
-    assert set(egd.templates.keys()) == set(
-        dummy_eigendecomposer.templates.keys()
-    )
+    assert set(egd.templates.keys()) == set(dummy_eigendecomposer.templates.keys())
 
     # important dims should be computed and be a boolean array
     assert hasattr(egd, "important_dims_indices")
     assert isinstance(egd.important_dims_indices, np.ndarray)
     assert egd.important_dims_indices.dtype == bool
-    assert egd.N_important_dims >= 1
+    assert egd.N_important_dims == 3
 
     # templates should exist and have eigen information accessible
     assert len(egd.templates) > 0
@@ -141,6 +139,27 @@ def test_eigendecompose_runs_and_sets_properties(
         assert isinstance(vals, np.ndarray) and vals.size > 0
         assert isinstance(vecs, np.ndarray) and vecs.size > 0
         assert isinstance(vars_, np.ndarray) and vars_.size > 0
+
+
+def test_eigendecompose_max_variations(toy_df):
+    df = toy_df.copy()
+    settings = read_yaml("study_setup", "sysvar_101")
+    max_vars = 1
+
+    egd = eigendecompose(
+        df=df,
+        settings=settings,
+        syst_effect="charged_slow_pi",
+        criterion="max_differences",
+        prc=1e-3,
+        max_variations=max_vars,
+        save_variations=False,
+        save_channel_covariance_matrices=False,
+        verbose=False,
+    )
+
+    assert egd.max_variations == max_vars
+    assert egd.N_important_dims == max_vars
 
 
 def test_eigendecompose_invalid_criterion_raises(toy_df):

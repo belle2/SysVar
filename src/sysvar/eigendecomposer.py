@@ -35,6 +35,7 @@ class EigenDecomposer(ChannelTemplateHandler):
         settings: dict,
         syst_effect: str | dict | None,
         verbose: bool = True,
+        seed: int = 8311311,
     ):
 
         super().__init__(df, settings, verbose)
@@ -51,8 +52,10 @@ class EigenDecomposer(ChannelTemplateHandler):
             )
 
         self.correction = create_correction_object(syst_effect, settings["MC_prod"])
-        self.variator = Variator(self.correction, Nvar=settings["Nvar"])
+        self.seed = seed
+        self.variator = Variator(self.correction, Nvar=settings["Nvar"], seed=seed)
         self.N_important_dims = 0
+        self.max_variations = None
         self.important_dims_indices = None
 
     @property
@@ -70,6 +73,14 @@ class EigenDecomposer(ChannelTemplateHandler):
     @precision.setter
     def precision(self, precision):
         self._precision = precision
+
+    @property
+    def max_variations(self) -> int | None:
+        return self._max_variations
+
+    @max_variations.setter
+    def max_variations(self, max_variations: int | None):
+        self._max_variations = max_variations
 
     @cached_property
     def combined_variations(self) -> np.ndarray:
@@ -111,9 +122,9 @@ class EigenDecomposer(ChannelTemplateHandler):
         running_cov = np.zeros_like(self.cov)
         # If the first eigenvalue is zero then the eigendirection is also zero
         # Completely skip this eigendirection but we still have to understand why this happens
-        if self.eigen_values[0]==0:
-            max_n = max_n - 1 # Consider one less eigendirection in total
-            n_start = 1 # skip the eigendirection that corresponds to 0 eigenvalue
+        if self.eigen_values[0] == 0:
+            max_n = max_n - 1  # Consider one less eigendirection in total
+            n_start = 1  # skip the eigendirection that corresponds to 0 eigenvalue
 
         max_diffs = np.empty(max_n, dtype=float)
 
@@ -179,8 +190,11 @@ class EigenDecomposer(ChannelTemplateHandler):
                 f"Available methods are: max_differences and trace"
             )
 
-        # Increase number by one to get the last principal componenent
+        # Increase number by one to get the last principal component
         self.N_important_dims = np.sum(important_dims) + 1
+        # Limit the number of important dimensions if max_variations is set
+        if self.max_variations is not None:
+            self.N_important_dims = min(self.N_important_dims, self.max_variations)
         # Set the index of the last principal component to True
         important_dims[self.N_important_dims] = True
         # Collect the indices of the important dimensions including the last one
@@ -190,6 +204,11 @@ class EigenDecomposer(ChannelTemplateHandler):
             self.N_important_dims,
             self.precision,
         )
+        if self.max_variations is not None and self.N_important_dims == self.max_variations:
+            logging.info(
+                f"Keeping only the first %s eigendirections",
+                self.max_variations,
+            )
 
     def _calculate_max_differences(self):
         """
