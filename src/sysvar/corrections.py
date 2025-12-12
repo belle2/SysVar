@@ -877,6 +877,94 @@ class Correction2DFromCSV(BaseCorrectionFromCSV):
             for (v1min, v1max, v2min, v2max) in self.iterator
         ]
         return self.add_extra_cuts(queries, prefix)
+    
+@dataclass
+class Correction3DFromCSV(BaseCorrectionFromCSV):
+    """
+    3D correction reader from a single CSV.
+    Expects columns:
+      - 'central_value'
+      - 'dependant_variable_1', 'dependant_variable_2', 'dependant_variable_3'
+      - '{var1}_unit', '{var2}_unit', '{var3}_unit'
+      - '{var1}_min','{var1}_max','{var2}_min','{var2}_max','{var3}_min','{var3}_max'
+    """
+
+    dependant_variable_1: str | None = None
+    dependant_variable_2: str | None = None
+    dependant_variable_3: str | None = None
+    unit_1: str | None = None
+    unit_2: str | None = None
+    unit_3: str | None = None
+    central_values: Iterable = None
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if "dependant_variable_1" not in self.table or "dependant_variable_2" not in self.table or "dependant_variable_3" not in self.table:
+            raise ValueError(
+                "CSV must contain 'dependant_variable_1', 'dependant_variable_2' and 'dependant_variable_3' columns."
+            )
+
+        self.dependant_variable_1 = str(self.table["dependant_variable_1"].iloc[0]).strip()
+        self.dependant_variable_2 = str(self.table["dependant_variable_2"].iloc[0]).strip()
+        self.dependant_variable_3 = str(self.table["dependant_variable_3"].iloc[0]).strip()
+
+        # Units
+        unit1_col = f"{self.dependant_variable_1}_unit"
+        unit2_col = f"{self.dependant_variable_2}_unit"
+        unit3_col = f"{self.dependant_variable_3}_unit"
+        self.unit_1 = self.table[unit1_col].iloc[0] if unit1_col in self.table else ""
+        self.unit_2 = self.table[unit2_col].iloc[0] if unit2_col in self.table else ""
+        self.unit_3 = self.table[unit3_col].iloc[0] if unit3_col in self.table else ""
+
+        # Edges
+        self._v1_min = f"{self.dependant_variable_1}_min"
+        self._v1_max = f"{self.dependant_variable_1}_max"
+        self._v2_min = f"{self.dependant_variable_2}_min"
+        self._v2_max = f"{self.dependant_variable_2}_max"
+        self._v3_min = f"{self.dependant_variable_3}_min"
+        self._v3_max = f"{self.dependant_variable_3}_max"
+        for c in (self._v1_min, self._v1_max, self._v2_min, self._v2_max, self._v3_min, self._v3_max):
+            if c not in self.table.columns:
+                raise ValueError(f"CSV must contain '{c}' column for 2D bin edges.")
+
+        self.central_values = self.table["central_value"].tolist()
+
+        self.populate_uncertainties()
+
+    @property
+    def iterator(self):
+        # Provide a generator over rows with unpacked bins
+        for _, row in self.table.iterrows():
+            yield (
+                row[self._v1_min],
+                row[self._v1_max],
+                row[self._v2_min],
+                row[self._v2_max],
+                row[self._v3_min],
+                row[self._v3_max],
+            )
+
+    @property
+    def visual_labels(self) -> List[str]:
+        return [
+            f"{v1min} <= {self.dependant_variable_1} < {v1max} {self.unit_1} & "
+            f"{v2min} <= {self.dependant_variable_2} < {v2max} {self.unit_2} & "
+            f"{v3min} <= {self.dependant_variable_3} < {v3max} {self.unit_3}"
+            for (v1min, v1max, v2min, v2max, v3min, v3max) in self.iterator
+        ]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+        column_name_1 = self._build_column_name(prefix, self.dependant_variable_1)
+        column_name_2 = self._build_column_name(prefix, self.dependant_variable_2)
+        column_name_3 = self._build_column_name(prefix, self.dependant_variable_3)
+        queries = [
+            f"{v1min} <= {column_name_1} < {v1max} & "
+            f"{v2min} <= {column_name_2} < {v2max} & "
+            f"{v3min} <= {column_name_3} < {v3max}"
+            for (v1min, v1max, v2min, v2max, v3min, v3max) in self.iterator
+        ]
+        return self.add_extra_cuts(queries, prefix)
 
 
 @dataclass
