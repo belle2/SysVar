@@ -14,7 +14,7 @@ In a typical HEP measurement, the observed dataset is a mixture of multiple phys
 MC prediction, however, is never used raw. Event-by-event correction weights are applied to account for effects such as detector response and calibration, physics reweighting, reconstruction efficiencies etc. These correction weights have systematic uncertainties. They affect both
 
     - the normalisation of a template (total yield)
-    - its shape (bin-to-bin correlations within and across templates)
+    - the shape of a template (bin-to-bin correlations within and across templates)
 
 If fits span multiple channels, multiple templates, multiple observables — keeping book of all correlations becomes non-trivial. Analysts either over-approximate (inflating uncertainties) or lose correlations (biasing the fit). SysVar solves this by providing an end-to-end, consistent machinery to build template histograms and their systematic variations with correlations preserved.
 
