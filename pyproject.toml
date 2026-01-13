@@ -39,8 +39,8 @@ source = "uv-dynamic-versioning"
 fallback-version = "0.0.0"
 
 [project.urls]
-Homepage = "https://gitlab.desy.de/itsaklid/sysvar"
-Documentation = "https://gitlab.desy.de/itsaklid/sysvar"
+Homepage = "https://gitlab.desy.de/belle2/software/sysvar"
+Documentation = "https://gitlab.desy.de/belle2/software/sysvar"
 # Source =
 # Changelog =
 # Tracker =

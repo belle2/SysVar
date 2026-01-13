@@ -56,7 +56,7 @@ As analysts important information to know about the structure for each type of c
         - **corrections**: Table path of the corrections
 
 - **CorrectionBF**: MC events are generated using the best available branching-fraction (BF) values at the time of generation. If updated BF values or uncertainties (e.g. from *PDG*) become available, events can be reweighted accordingly, using correction weights with the appropriate uncertainties. A basic structure — with example corrections — is provided in SysVar, but these are analysis-dependent and should be adjusted to match the needs of each analysis.
-The types of decays for which BF corrections are currently available in SysVar include:
+    The types of decays for which BF corrections are currently available in SysVar include:
 
     - :math:`B` meson semileptonic decays
     - :math:`D^{(*,**)}` meson decays

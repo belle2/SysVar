@@ -73,6 +73,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "nbsphinx",
+    "myst_parser",
 ]
 
 # Optional: don't execute cells during build
@@ -87,7 +88,10 @@ templates_path = ["_templates"]
 math_number_all = True
 
 # The suffix of source filenames.
-source_suffix = ".rst"
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
 
 # The encoding of source files.
 # source_encoding = 'utf-8-sig'
@@ -162,19 +166,7 @@ todo_emit_warnings = True
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = "sphinx_rtd_theme"
-
-# Theme options are theme-specific and customize the look and feel of a theme
-# further.  For a list of options available for each theme, see the
-# documentation.
-html_theme_options = {
-    "sidebar_width": "300px",
-    "page_width": "1200px",
-    # Keep sidebar consistent: use only master toctree entries
-    "globaltoc_collapse": True,
-    "globaltoc_includehidden": False,
-    "globaltoc_maxdepth": 1,
-}
+html_theme = "sphinx_book_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -186,58 +178,8 @@ html_css_files = [
     "custom.css",
 ]
 
-# If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
-# using the given strftime format.
-# html_last_updated_fmt = '%b %d, %Y'
-
-# If true, SmartyPants will be used to convert quotes and dashes to
-# typographically correct entities.
-# html_use_smartypants = True
-
-# Custom sidebar templates, maps document names to template names.
-# Use a global ToC so sidebar order stays consistent across pages
-html_sidebars = {
-    "**": [
-        "about.html",
-        "searchbox.html",
-        "globaltoc.html",
-        "relations.html",
-    ]
-}
-
-# Additional templates that should be rendered to pages, maps page names to
-# template names.
-# html_additional_pages = {}
-
-# If false, no module index is generated.
-# html_domain_indices = True
-
-# If false, no index is generated.
-# html_use_index = True
-
-# If true, the index is split into individual pages for each letter.
-# html_split_index = False
-
-# If true, links to the reST sources are added to the pages.
-# html_show_sourcelink = True
-
-# If true, "Created using Sphinx" is shown in the HTML footer. Default is True.
-# html_show_sphinx = True
-
-# If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
-# html_show_copyright = True
-
-# If true, an OpenSearch description file will be output, and all pages will
-# contain a <link> tag referring to it.  The value of this option must be the
-# base URL from which the finished HTML is served.
-# html_use_opensearch = ''
-
-# This is the file name suffix for HTML files (e.g. ".xhtml").
-# html_file_suffix = None
-
 # Output file base name for HTML help builder.
 htmlhelp_basename = "SysVar-doc"
-
 
 # -- Options for LaTeX output ------------------------------------------------
 
@@ -255,26 +197,6 @@ latex_elements = {
 latex_documents = [
     ("index", "user_guide.tex", "SysVar Documentation", "Ilias Tsaklidis", "manual")
 ]
-
-# The name of an image file (relative to this directory) to place at the top of
-# the title page.
-# latex_logo = ""
-
-# For "manual" documents, if this is true, then toplevel headings are parts,
-# not chapters.
-# latex_use_parts = False
-
-# If true, show page references after internal links.
-# latex_show_pagerefs = False
-
-# If true, show URL addresses after external links.
-# latex_show_urls = False
-
-# Documents to append as an appendix to all manuals.
-# latex_appendices = []
-
-# If false, no module index is generated.
-# latex_domain_indices = True
 
 # -- External mapping --------------------------------------------------------
 python_version = ".".join(map(str, sys.version_info[0:2]))
