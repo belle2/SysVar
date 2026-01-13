@@ -1,8 +1,8 @@
 .. _information_for_analysts:
 
-============
+========================
 Information for anaylsts
-============
+========================
 
 **SysVar** is developed to treat the systematic uncertanties of the analysis in a consistent manner. As described in :doc:`Home <index>`, Sysvar streamlines this procedure to preserve the correlations arising in and across the templates due to the various types of :ref:`corrections`.
 
