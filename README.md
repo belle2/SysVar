@@ -1,6 +1,6 @@
 # SysVar
 
-Welcome to `SysVar`, a tool for ensuring consistency in treatment of systematics.
+Welcome to `SysVar`, a tool for ensuring consistency in the treatment of systematics.
 
 This documentation will guide the user to begin making use of it or even contribute to its development. Welcome onboard!
 
