@@ -138,9 +138,7 @@ We gratefully acknowledge the following individuals for their code contributions
 | Tristan Fillinger         | tristan.fillinger@kek.jp       | 2       | Plotting, Feauture additions, feedback              |
 | Giacomo De Pietro         | giacomo.pietro@kit.edu         | 2       | CI/CD setup and maintenance                         |
 | Maximilian Hoverath       | s6mahove@uni-bonn.de           | 2       | BF correction updates from PDG                      |
-
-
-
+| Melisa-Melek Akdak        | makdag@uni-bonn.de             | 1       | Logo                                                |
 
 > 📊 Commit counts are based on Git history (`git shortlog -sne`) and may include merge commits.
 > They reflect authored commits; contributions via design, review, and discussion are also highly valued.
