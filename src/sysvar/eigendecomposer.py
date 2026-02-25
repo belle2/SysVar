@@ -4,6 +4,7 @@ from os import path, makedirs
 import itertools
 from functools import cached_property
 from typing import List
+from warnings import warn
 
 from tqdm import tqdm
 
@@ -79,6 +80,7 @@ class EigenDecomposer(ChannelTemplateHandler):
             )
         # Handle YAML-based corrections
         elif syst_effect is not None:
+            warn("YAML-based corrections are deprecated and will be removed in a future version. Please use CSV-based corrections instead.", DeprecationWarning)
             if isinstance(syst_effect, dict):
                 self._syst_effect = syst_effect["name"]
             elif isinstance(syst_effect, str):
