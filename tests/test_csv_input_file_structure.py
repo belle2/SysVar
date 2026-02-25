@@ -113,9 +113,13 @@ def test_1d_csv_populates_uncertainties(corr1d_and_path):
 # -----------------------------
 
 
-@pytest.fixture
-def corr2d_and_path():
-    csv_filename = "neutral_pi_corr.csv"
+@pytest.fixture(params=["neutral_pi_corr.csv"])
+def corr2d_and_path(request):
+    """
+    Parametrized fixture so you can extend by adding more 2D CSV filenames
+    to the params list.
+    """
+    csv_filename = request.param
     csv_path = _config_csv_path(csv_filename)
 
     if not csv_path.exists():
@@ -156,7 +160,6 @@ def test_2d_csv_units_are_strings(corr2d_and_path):
 def test_2d_csv_edges_columns_exist_and_iterator_matches_rows(corr2d_and_path):
     corr, csv_path = corr2d_and_path
 
-    # These are computed in __post_init__; ensure they exist and are in the table
     for col in (corr._v1_min, corr._v1_max, corr._v2_min, corr._v2_max):
         assert (
             col in corr.table.columns
@@ -164,8 +167,6 @@ def test_2d_csv_edges_columns_exist_and_iterator_matches_rows(corr2d_and_path):
 
     bins = list(corr.iterator)
     assert len(bins) == len(corr.table), f"iterator length != table rows for {csv_path}"
-
-    # each yielded item should be a 4-tuple of numbers
     assert all(
         len(b) == 4 for b in bins
     ), f"iterator did not yield 4-tuples for {csv_path}"
@@ -198,6 +199,7 @@ def test_2d_csv_build_queries_returns_one_per_row(corr2d_and_path):
 def test_2d_csv_visual_labels_returns_one_per_row(corr2d_and_path):
     corr, csv_path = corr2d_and_path
     labels = corr.visual_labels
+
     assert isinstance(labels, list), f"visual_labels did not return list for {csv_path}"
     assert len(labels) == len(
         corr.table
