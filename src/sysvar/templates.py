@@ -235,9 +235,9 @@ class Template(ABC, SavableAttributesObject):
                 self.syst_weight,
                 self.correction.dependant_variable,
             ]
-            # Add extra cuts if available (YAML-based corrections)
-            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts" in self.correction.info and self.correction.info["extra_cuts"] is not None:
-                variables.extend(list(self.correction.info["extra_cuts"].keys()))
+            # Add extra cuts if available
+            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts_columns" in self.correction.info and self.correction.info["extra_cuts_columns"] is not None:
+                variables.extend(list(self.correction.info["extra_cuts_columns"]))
         elif isinstance(self.correction, CorrectionBF):
             variables = [self.syst_weight, self.correction.dependant_variable]
         elif isinstance(self.correction, (Correction2D, Correction2DFromCSV)):
@@ -246,9 +246,19 @@ class Template(ABC, SavableAttributesObject):
                 self.correction.dependant_variable_1,
                 self.correction.dependant_variable_2,
             ]
-            # Add extra cuts if available (YAML-based corrections)
-            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts" in self.correction.info and self.correction.info["extra_cuts"] is not None:
-                variables.extend(list(self.correction.info["extra_cuts"].keys()))
+            # Add extra cuts if available
+            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts_columns" in self.correction.info and self.correction.info["extra_cuts_columns"] is not None:
+                variables.extend(list(self.correction.info["extra_cuts_columns"]))
+        elif isinstance(self.correction, Correction3DFromCSV):
+            variables = [
+                self.syst_weight,
+                self.correction.dependant_variable_1,
+                self.correction.dependant_variable_2,
+                self.correction.dependant_variable_3,
+            ]
+            # Add extra cuts if available
+            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts_columns" in self.correction.info and self.correction.info["extra_cuts_columns"] is not None:
+                variables.extend(list(self.correction.info["extra_cuts_columns"]))
         elif isinstance(self.correction, CorrectionPID):
             variables = [
                 self.syst_weight,

@@ -34,6 +34,8 @@ class EigenDecomposer(ChannelTemplateHandler):
         df: DataFrame,
         settings: dict,
         syst_effect: str | dict | None = None,
+        csv_path: str | None = None,
+        title: str | None = None,
         verbose: bool = True,
         seed: int = 8311311,
     ):
@@ -49,8 +51,6 @@ class EigenDecomposer(ChannelTemplateHandler):
             verbose (bool, optional): Whether to enable verbose logging. Defaults to True.
             csv_path (str | None, optional): Path to CSV file for CSV-based corrections.
                 If provided, syst_effect is ignored.
-            csv_type (str | None, optional): Type of CSV correction ("1D" or "2D").
-                If not provided, will be auto-detected from CSV structure.
             title (str | None, optional): Custom title for CSV-based corrections.
                 If not provided, will use the CSV filename.
 
@@ -75,7 +75,6 @@ class EigenDecomposer(ChannelTemplateHandler):
                 syst_effect=None,
                 MC_prod=None,
                 csv_path=csv_path,
-                csv_type=csv_type,
                 title=title
             )
         # Handle YAML-based corrections
@@ -95,8 +94,7 @@ class EigenDecomposer(ChannelTemplateHandler):
                 "Either syst_effect or csv_path must be provided. "
                 "Use syst_effect for YAML-based corrections or csv_path for CSV-based corrections."
             )
-
-        self.correction = create_correction_object(syst_effect, settings["MC_prod"])
+        
         self.seed = seed
         self.variator = Variator(self.correction, Nvar=settings["Nvar"], seed=seed)
         self.N_important_dims = 0
