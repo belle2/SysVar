@@ -18,7 +18,7 @@ def _config_csv_path(csv_filename: str) -> Path:
 # -----------------------------
 
 
-@pytest.fixture(params=["charged_slow_pi_correction(1).csv", "fei_Bp_001.csv"])
+@pytest.fixture(params=["charged_slow_pi_correction.csv", "fei_Bp_001.csv"])
 def corr1d_and_path(request):
     csv_filename = request.param
     csv_path = _config_csv_path(csv_filename)
