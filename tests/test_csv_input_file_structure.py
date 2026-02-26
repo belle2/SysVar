@@ -18,15 +18,30 @@ def _config_csv_path(csv_filename: str) -> Path:
 # -----------------------------
 
 
-@pytest.fixture(params=["charged_slow_pi_correction.csv", "fei_Bp_001.csv"])
+@pytest.fixture(
+    params=[
+        {"csv": "charged_slow_pi_correction.csv", "cov": None},
+        {"csv": "fei_Bp_001.csv", "cov": "Comb_Cov_RD_Bp_SigProb_0_001.npy"},
+    ]
+)
 def corr1d_and_path(request):
-    csv_filename = request.param
-    csv_path = _config_csv_path(csv_filename)
+    csv_filename = request.param["csv"]
+    cov_filename = request.param["cov"]
 
+    csv_path = _config_csv_path(csv_filename)
     if not csv_path.exists():
         pytest.skip(f"CSV config not found in repo: {csv_path}")
 
-    corr = corrections.Correction1DFromCSV(csv_path=str(csv_path))
+    cov_path = None
+    if cov_filename is not None:
+        cov_path = _config_csv_path(cov_filename)
+        if not cov_path.exists():
+            pytest.skip(f"Cov matrix config not found in repo: {cov_path}")
+
+    corr = corrections.Correction1DFromCSV(
+        csv_path=str(csv_path),
+        cov_matrix_path=(None if cov_path is None else str(cov_path)),
+    )
     return corr, csv_path
 
 
@@ -113,19 +128,35 @@ def test_1d_csv_populates_uncertainties(corr1d_and_path):
 # -----------------------------
 
 
-@pytest.fixture(params=["neutral_pi_corr.csv"])
+@pytest.fixture(
+    params=[
+        # neutral pi 2D: no covariance matrix (adjust/add entries as needed)
+        {"csv": "neutral_pi_corr.csv", "cov": None},
+        # Example if you later add a 2D cov matrix:
+        # {"csv": "some_2d.csv", "cov": "some_2d_cov.npy"},
+    ]
+)
 def corr2d_and_path(request):
     """
-    Parametrized fixture so you can extend by adding more 2D CSV filenames
-    to the params list.
+    Parametrized fixture for 2D CSVs, with optional covariance matrix file.
     """
-    csv_filename = request.param
-    csv_path = _config_csv_path(csv_filename)
+    csv_filename = request.param["csv"]
+    cov_filename = request.param["cov"]
 
+    csv_path = _config_csv_path(csv_filename)
     if not csv_path.exists():
         pytest.skip(f"CSV config not found in repo: {csv_path}")
 
-    corr = corrections.Correction2DFromCSV(csv_path=str(csv_path))
+    cov_path = None
+    if cov_filename is not None:
+        cov_path = _config_csv_path(cov_filename)
+        if not cov_path.exists():
+            pytest.skip(f"Cov matrix config not found in repo: {cov_path}")
+
+    corr = corrections.Correction2DFromCSV(
+        csv_path=str(csv_path),
+        cov_matrix_path=(None if cov_path is None else str(cov_path)),
+    )
     return corr, csv_path
 
 
