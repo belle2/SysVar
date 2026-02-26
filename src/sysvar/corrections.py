@@ -386,7 +386,7 @@ class BaseCorrectionFromCSV(BaseCorrection):
                 "csv_path must be provided when using BaseCorrectionFromCSV."
             )
 
-        self.table = read_csv(self.csv_path)
+        self.table = read_csv(self.csv_path, keep_default_na=False) 
         self._is_valid_table()
 
         # Handle explicit covariance matrix
@@ -425,9 +425,11 @@ class BaseCorrectionFromCSV(BaseCorrection):
                             )
                     elif pd.isna(pdg_value):
                         continue
+                    elif pdg_value == "":
+                        continue
                     else:
                         raise ValueError(
-                            f"Column '{pdg_column}' must use string list format like '[521,-521]'; got: {pdg_value}"
+                            f"Column '{pdg_column}' must use string list format like '[521,-521]'; got: {pdg_value} with datatype {type(pdg_value)}"
                         )
 
     def _build_info_from_table(self) -> dict:
@@ -457,6 +459,8 @@ class BaseCorrectionFromCSV(BaseCorrection):
             
             values = self.table[key].tolist()
 
+            if any (value == "" for value in values):
+                continue
             if not any(np.isnan(values)) and not any(np.isinf(values)):
                 if key.endswith("_corr"):
                     uncertainties["fully_correlated"][key] = values
