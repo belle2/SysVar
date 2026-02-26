@@ -47,7 +47,7 @@ class EigenDecomposer(ChannelTemplateHandler):
             df (DataFrame): The input dataframe containing the data to be analyzed.
             settings (dict): Configuration settings containing analysis parameters.
             syst_effect (str | dict | None, optional): Systematic effect identifier for YAML-based corrections.
-                Can be a string (systematic name) or dict (custom correction). 
+                Can be a string (systematic name) or dict (custom correction).
                 Required if csv_path is not provided.
             verbose (bool, optional): Whether to enable verbose logging. Defaults to True.
             csv_path (str | None, optional): Path to CSV file for CSV-based corrections.
@@ -61,26 +61,32 @@ class EigenDecomposer(ChannelTemplateHandler):
         Examples:
             >>> # YAML-based correction
             >>> decomposer = EigenDecomposer(df, settings, syst_effect="track_eff")
-            
-            >>> # CSV-based correction  
+
+            >>> # CSV-based correction
             >>> decomposer = EigenDecomposer(df, settings, csv_path="corrections/track_eff.csv")
-            
+
         """
 
         super().__init__(df, settings, verbose)
 
         # Handle CSV-based corrections
         if csv_path is not None:
-            self._syst_effect = title if title is not None else path.basename(csv_path).replace('.csv', '')
+            self._syst_effect = (
+                title
+                if title is not None
+                else path.basename(csv_path).replace(".csv", "")
+            )
             self.correction = create_correction_object(
-                syst_effect=None,
-                MC_prod=None,
-                csv_path=csv_path,
-                title=title
+                syst_effect=None, MC_prod=None, csv_path=csv_path, title=title
             )
         # Handle YAML-based corrections
         elif syst_effect is not None:
-            warn("YAML-based corrections are deprecated and will be removed in a future version. Please use CSV-based corrections instead.", DeprecationWarning)
+            warn(
+                "Deprecation warning: YAML-based corrections from the Performance group are deprecated since MC16rd and will be removed in a future release. "
+                "Please migrate to the CSV-based corrections. "
+                "YAML corrections will remain available only for custom (user-provided) corrections, but future support is not guaranteed.",
+                DeprecationWarning,
+            )
             if isinstance(syst_effect, dict):
                 self._syst_effect = syst_effect["name"]
             elif isinstance(syst_effect, str):
@@ -89,14 +95,14 @@ class EigenDecomposer(ChannelTemplateHandler):
                 raise ValueError(
                     f"syst_effect must be a string or a dict but you passed {type(syst_effect)}"
                 )
-            
+
             self.correction = create_correction_object(syst_effect, settings["MC_prod"])
         else:
             raise ValueError(
                 "Either syst_effect or csv_path must be provided. "
                 "Use syst_effect for YAML-based corrections or csv_path for CSV-based corrections."
             )
-        
+
         self.seed = seed
         self.variator = Variator(self.correction, Nvar=settings["Nvar"], seed=seed)
         self.N_important_dims = 0
@@ -249,7 +255,10 @@ class EigenDecomposer(ChannelTemplateHandler):
             self.N_important_dims,
             self.precision,
         )
-        if self.max_variations is not None and self.N_important_dims == self.max_variations:
+        if (
+            self.max_variations is not None
+            and self.N_important_dims == self.max_variations
+        ):
             logging.info(
                 f"Keeping only the first %s eigendirections",
                 self.max_variations,
