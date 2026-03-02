@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Iterable, Optional, Dict, Union
 from os import path
+from warnings import warn
 
 import numpy as np
 from pandas import DataFrame
@@ -27,6 +28,7 @@ logging.basicConfig(
 
 def add_weights_to_dataframe(
     df: DataFrame,
+    csv_path: str | None,
     systematic: str,
     MC_production: str,
     prefix: str,
@@ -83,7 +85,19 @@ def add_weights_to_dataframe(
             if variator is not None:
                 df.loc[mask, variation_columns] = variator.variations[:, i]
 
-    correction = create_correction_object(systematic, MC_production)
+    if csv_path is not None:
+        correction = create_correction_object(syst_effect=None, MC_production=MC_production, csv_path=csv_path)
+    elif systematic is not None and MC_production is not None:
+        warn(
+                "Deprecation warning: YAML-based corrections from the Performance group are deprecated since MC16rd and will be removed in a future release. "
+                "Please migrate to the CSV-based corrections. "
+                "YAML corrections will remain available only for custom (user-provided) corrections, but future support is not guaranteed.",
+                DeprecationWarning,
+            )
+        correction = create_correction_object(systematic, MC_production)
+    else:
+        raise ValueError("Either csv_path or both systematic and MC_production must be provided to create a correction object.")
+
     column_name = correction._build_column_name(prefix, weightname)
 
     variator = Variator(correction, Nvar) if Nvar > 0 else None
@@ -108,6 +122,7 @@ def eigendecompose(
     df: DataFrame,
     settings: Dict,
     syst_effect: str,
+    csv_path: str | None = None,
     criterion: str = "max_differences",
     prc: float = 1e-4,
     max_variations: int | None = None,
@@ -142,7 +157,18 @@ def eigendecompose(
         EigenDecomposer: An instance of the `EigenDecomposer` class containing the decomposition results.
     """
 
-    egd = EigenDecomposer(df, settings, syst_effect, verbose=verbose, seed=seed)
+    if csv_path is not None:
+        egd = EigenDecomposer(df, settings, csv_path, verbose=verbose, seed=seed)
+    elif syst_effect is not None:
+        warn(
+                "Deprecation warning: YAML-based corrections from the Performance group are deprecated since MC16rd and will be removed in a future release. "
+                "Please migrate to the CSV-based corrections. "
+                "YAML corrections will remain available only for custom (user-provided) corrections, but future support is not guaranteed.",
+                DeprecationWarning,
+            )
+        egd = EigenDecomposer(df, settings, syst_effect, verbose=verbose, seed=seed)
+    else:
+        raise ValueError("Either csv_path or syst_effect must be provided to perform eigendecomposition.")
     egd.vary_templates()
     egd.precision = prc
     egd.max_variations = max_variations
