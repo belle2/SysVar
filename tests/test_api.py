@@ -37,7 +37,7 @@ def dummy_eigendecomposer(toy_df, request):
     csv_filename = request.param["csv"]
     csv_path = _config_csv_path(csv_filename)
 
-    egd = EigenDecomposer(toy_df, settings, csv_path, verbose=False)
+    egd = EigenDecomposer(toy_df, settings, csv_path, title=syst_effect, verbose=False)
     egd.vary_templates()
     egd.precision = 1e-4
     egd.find_important_eigendimension_indices("max_differences")
