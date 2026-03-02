@@ -62,6 +62,7 @@ def toy_df():
         df=df,
         systematic="charged_slow_pi",
         MC_production="sysvar_101",
+        csv_path=None,
         prefix="slow_pi",
         weightname="charged_weight",
     )
