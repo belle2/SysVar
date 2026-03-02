@@ -33,7 +33,7 @@ def _config_csv_path(csv_filename: str) -> Path:
 )
 def dummy_eigendecomposer(toy_df, request):
     settings = read_yaml("study_setup", "sysvar_101")
-    #syst_effect = "charged_slow_pi"
+    syst_effect = "charged_slow_pi"
     csv_filename = request.param["csv"]
     csv_path = _config_csv_path(csv_filename)
 
