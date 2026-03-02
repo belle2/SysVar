@@ -74,7 +74,7 @@ class EigenDecomposer(ChannelTemplateHandler):
             self._syst_effect = (
                 title
                 if title is not None
-                else str(path.basename(csv_path).replace(".csv", ""))
+                else csv_path
             )
             self.correction = create_correction_object(
                 syst_effect=None, MC_prod=None, csv_path=csv_path, title=title
