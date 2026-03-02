@@ -86,7 +86,7 @@ def add_weights_to_dataframe(
                 df.loc[mask, variation_columns] = variator.variations[:, i]
 
     if csv_path is not None:
-        correction = create_correction_object(syst_effect=None, MC_production=MC_production, csv_path=csv_path)
+        correction = create_correction_object(syst_effect=None, MC_prod=MC_production, csv_path=csv_path)
     elif systematic is not None and MC_production is not None:
         warn(
                 "Deprecation warning: YAML-based corrections from the Performance group are deprecated since MC16rd and will be removed in a future release. "
@@ -94,7 +94,7 @@ def add_weights_to_dataframe(
                 "YAML corrections will remain available only for custom (user-provided) corrections, but future support is not guaranteed.",
                 DeprecationWarning,
             )
-        correction = create_correction_object(systematic, MC_production)
+        correction = create_correction_object(syst_effect=systematic,MC_prod= MC_production)
     else:
         raise ValueError("Either csv_path or both systematic and MC_production must be provided to create a correction object.")
 
