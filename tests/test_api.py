@@ -37,7 +37,7 @@ def dummy_eigendecomposer(toy_df, request):
     csv_filename = request.param["csv"]
     csv_path = _config_csv_path(csv_filename)
 
-    egd = EigenDecomposer(toy_df, settings, csv_path, title=syst_effect, verbose=False)
+    egd = EigenDecomposer(toy_df, settings, csv_path=csv_path, title=syst_effect, verbose=False)
     egd.vary_templates()
     egd.precision = 1e-4
     egd.find_important_eigendimension_indices("max_differences")
@@ -121,8 +121,8 @@ def test_add_weights_to_dataframe_negative_Nvar_raises(toy_df, request):
     with pytest.raises(ValueError):
         add_weights_to_dataframe(
             df=df,
-            systematic="charged_slow_pi",
-            MC_production="sysvar_101",
+            #systematic="charged_slow_pi",
+            #MC_production="sysvar_101",
             csv_path=csv_path,
             prefix="slow_pi",
             weightname="charged_weight",
