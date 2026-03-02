@@ -29,10 +29,10 @@ logging.basicConfig(
 def add_weights_to_dataframe(
     df: DataFrame,
     csv_path: str | None,
-    systematic: str | None,
-    MC_production: str | None,
-    prefix: str,
-    weightname: str,
+    systematic: str | None = None,
+    MC_production: str | None = None,
+    prefix: str | None = None,
+    weightname: str | None = None,
     overwrite: bool = False,
     Nvar: int = 0,
 ):
