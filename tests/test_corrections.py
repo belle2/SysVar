@@ -24,6 +24,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from unittest.mock import patch, MagicMock
 
 import sysvar.corrections as corrections
 from sysvar.corrections import (
@@ -35,6 +36,8 @@ from sysvar.corrections import (
     MissingInformationError,
     InvalidCorrectionTableKey,
     UncertaintyWithSameNameExists,
+    CorrectionBF,
+    CustomCorrection,
 )
 
 
@@ -740,3 +743,551 @@ class TestExtendQueriesWithExtraCut:
             ["x > 0"], "y == 1"
         )
         assert result == ["x > 0 & y == 1"]
+
+
+# ===========================================================================
+# Shared helpers
+# ===========================================================================
+
+
+def _make_bf_info(
+    correlation: str = "fully_correlated",
+    extra_cuts: dict | None = None,
+    modes: dict | None = None,
+):
+    """Return a minimal info dict that satisfies CorrectionBF.__post_init__."""
+    if modes is None:
+        modes = {
+            "mode_a": {
+                "pdg_live": [0.10, 0.01],
+                "decay_dec": 0.08,
+                "daughters": [[521, -211]],
+                "dmID": "mode_a_id",
+            },
+            "mode_b": {
+                "pdg_live": [0.20, 0.02],
+                "decay_dec": 0.18,
+                "daughters": [[521, -321]],
+                "dmID": [10, 11],  # list → uses `in` operator in query
+            },
+        }
+    return {
+        "title": "Test BF Correction",
+        "mother_particle": 521,  # B+
+        "modes": modes,
+        "correlation": correlation,
+        "extra_cuts": extra_cuts,
+        "dependant_variable": "dmID",
+    }
+
+
+def _make_custom_info(
+    n: int = 3,
+    cov_matrix: list | None = None,
+):
+    """Return a minimal info dict for CustomCorrection."""
+    info = {
+        "dependant_variable": "channel",
+        "central_values": [0.95, 1.00, 1.05][:n],
+        "query_targets": ["ch_A", "ch_B", "ch_C"][:n],
+        "unit": "GeV",
+        "title": "Test Custom Correction",
+        "uncertainties": {
+            "fully_correlated": {
+                "sys": [0.02, 0.03, 0.025][:n],
+            },
+            "uncorrelated": {
+                "stat": [0.01, 0.01, 0.01][:n],
+            },
+        },
+    }
+    if cov_matrix is not None:
+        info["my_cov"] = cov_matrix
+    return info
+
+
+# ===========================================================================
+# CorrectionBF fixture
+# ===========================================================================
+
+
+@pytest.fixture
+def bf_info():
+    return _make_bf_info()
+
+
+@pytest.fixture
+def corr_bf(bf_info):
+    """
+    CorrectionBF with its YAML loading patched out so no real config files
+    are needed. cov_matrix is forced to None (no explicit covariance file).
+    """
+    with patch("sysvar.corrections.read_yaml", return_value=bf_info), patch(
+        "sysvar.corrections.load_covariance_matrix", return_value=None
+    ):
+        corr = CorrectionBF(systematic="fake_sys", MC_production="fake_prod")
+    return corr
+
+
+# ===========================================================================
+# CorrectionBF – _calculate_scaling_ratios
+# ===========================================================================
+
+
+class TestCorrectionBF_ScalingRatios:
+
+    def test_central_values_length_matches_modes(self, corr_bf, bf_info):
+        assert len(corr_bf.central_values) == len(bf_info["modes"])
+
+    def test_central_values_are_floats(self, corr_bf):
+        assert all(isinstance(v, float) for v in corr_bf.central_values)
+
+    def test_central_values_are_ratios(self, bf_info):
+        """central_value[i] ≈ pdg_live[0] / decay_dec."""
+        with patch("sysvar.corrections.read_yaml", return_value=bf_info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            corr = CorrectionBF(systematic="x", MC_production="y")
+
+        modes = list(bf_info["modes"].values())
+        for i, mode in enumerate(modes):
+            expected = mode["pdg_live"][0] / mode["decay_dec"]
+            assert pytest.approx(corr.central_values[i], rel=1e-6) == expected
+
+    def test_zero_decay_dec_gives_central_value_one(self):
+        """When decay_dec == 0, the safe-divide fallback returns 1 ± 1."""
+        info = _make_bf_info(
+            modes={
+                "mode_zero": {
+                    "pdg_live": [0.10, 0.01],
+                    "decay_dec": 0.0,
+                    "daughters": [[521, -211]],
+                    "dmID": "zero",
+                }
+            }
+        )
+        with patch("sysvar.corrections.read_yaml", return_value=info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            corr = CorrectionBF(systematic="x", MC_production="y")
+        assert pytest.approx(corr.central_values[0]) == 1.0
+
+    def test_zero_pdg_gives_central_value_one(self):
+        """When pdg_live == 0, the safe-divide fallback returns 1 ± 1."""
+        info = _make_bf_info(
+            modes={
+                "mode_zero": {
+                    "pdg_live": [0.0, 0.0],
+                    "decay_dec": 0.5,
+                    "daughters": [[521, -211]],
+                    "dmID": "zero",
+                }
+            }
+        )
+        with patch("sysvar.corrections.read_yaml", return_value=info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            corr = CorrectionBF(systematic="x", MC_production="y")
+        assert pytest.approx(corr.central_values[0]) == 1.0
+
+
+# ===========================================================================
+# CorrectionBF – visual_labels / _create_strings
+# ===========================================================================
+
+
+class TestCorrectionBF_VisualLabels:
+
+    def test_visual_labels_count_matches_modes(self, corr_bf, bf_info):
+        # one label per daughter set across all modes
+        total_daughter_sets = sum(
+            len(mode["daughters"]) for mode in bf_info["modes"].values()
+        )
+        assert len(corr_bf.visual_labels) == total_daughter_sets
+
+    def test_visual_labels_are_non_empty_strings(self, corr_bf):
+        for label in corr_bf.visual_labels:
+            assert isinstance(label, str) and label.strip()
+
+    def test_visual_labels_contain_arrow(self, corr_bf):
+        for label in corr_bf.visual_labels:
+            assert r"\rightarrow" in label
+
+    def test_visual_labels_wrapped_in_math_mode(self, corr_bf):
+        for label in corr_bf.visual_labels:
+            assert label.startswith("$") and label.endswith("$")
+
+    def test_visual_labels_multiple_daughter_sets(self):
+        """Two daughter sets in a single mode → two labels."""
+        info = _make_bf_info(
+            modes={
+                "mode_multi": {
+                    "pdg_live": [0.10, 0.01],
+                    "decay_dec": 0.08,
+                    "daughters": [[521, -211], [521, -321]],
+                    "dmID": "multi",
+                }
+            }
+        )
+        with patch("sysvar.corrections.read_yaml", return_value=info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            corr = CorrectionBF(systematic="x", MC_production="y")
+        assert len(corr.visual_labels) == 2
+
+
+# ===========================================================================
+# CorrectionBF – uncertainties / populate_uncertainties
+# ===========================================================================
+
+
+class TestCorrectionBF_Uncertainties:
+
+    def test_bf_unc_key_exists(self, corr_bf):
+        assert "BF_unc" in corr_bf.uncertainties
+
+    def test_total_error_length_matches_N(self, corr_bf):
+        assert len(corr_bf.total_error) == corr_bf.N
+
+    def test_total_error_is_positive(self, corr_bf):
+        assert np.all(corr_bf.total_error >= 0)
+
+    def test_N_equals_central_values_length(self, corr_bf):
+        assert corr_bf.N == len(corr_bf.central_values)
+
+    @pytest.mark.parametrize(
+        "correlation", ["fully_correlated", "uncorrelated", "fully_correlated_in_parts"]
+    )
+    def test_valid_correlation_types_accepted(self, correlation):
+        info = _make_bf_info(correlation=correlation)
+        with patch("sysvar.corrections.read_yaml", return_value=info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            corr = CorrectionBF(systematic="x", MC_production="y")
+        assert "BF_unc" in corr.uncertainties
+
+    def test_explicitly_correlated_raises_not_implemented(self):
+        info = _make_bf_info(correlation="explicitly_correlated")
+        with patch("sysvar.corrections.read_yaml", return_value=info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            with pytest.raises(NotImplementedError):
+                CorrectionBF(systematic="x", MC_production="y")
+
+    def test_unknown_correlation_raises_value_error(self):
+        info = _make_bf_info(correlation="made_up_type")
+        with patch("sysvar.corrections.read_yaml", return_value=info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            with pytest.raises(ValueError, match="Unkown correlation type"):
+                CorrectionBF(systematic="x", MC_production="y")
+
+
+# ===========================================================================
+# CorrectionBF – build_queries
+# ===========================================================================
+
+
+class TestCorrectionBF_BuildQueries:
+
+    def test_returns_list(self, corr_bf):
+        assert isinstance(corr_bf.build_queries(), list)
+
+    def test_length_matches_modes(self, corr_bf, bf_info):
+        assert len(corr_bf.build_queries()) == len(bf_info["modes"])
+
+    def test_string_dmid_uses_equality(self, corr_bf):
+        """mode_a has dmID='mode_a_id' → should use == 'mode_a_id'."""
+        queries = corr_bf.build_queries(prefix=None)
+        assert queries[0] == "dmID == 'mode_a_id'"
+
+    def test_list_dmid_uses_in(self, corr_bf):
+        """mode_b has dmID=[10, 11] → should use `in [10, 11]`."""
+        queries = corr_bf.build_queries(prefix=None)
+        assert "dmID in [10, 11]" in queries[1]
+
+    def test_prefix_prepended_to_variable(self, corr_bf):
+        queries = corr_bf.build_queries(prefix="slow_pi")
+        for q in queries:
+            assert "slow_pi_dmID" in q
+
+    def test_no_prefix_uses_variable_directly(self, corr_bf):
+        queries = corr_bf.build_queries(prefix=None)
+        for q in queries:
+            assert q.startswith("dmID")
+
+    def test_all_queries_are_non_empty_strings(self, corr_bf):
+        for q in corr_bf.build_queries():
+            assert isinstance(q, str) and q.strip()
+
+    def test_extra_cuts_injected_when_present(self):
+        """extra_cuts in info should be appended to each query."""
+        info = _make_bf_info(extra_cuts={"charge": [1, -1]})
+        with patch("sysvar.corrections.read_yaml", return_value=info), patch(
+            "sysvar.corrections.load_covariance_matrix", return_value=None
+        ):
+            corr = CorrectionBF(systematic="x", MC_production="y")
+        queries = corr.build_queries(prefix=None)
+        for q in queries:
+            assert "charge" in q
+
+    def test_no_extra_cuts_when_none(self, corr_bf):
+        """With extra_cuts=None, queries stay clean."""
+        queries = corr_bf.build_queries(prefix=None)
+        for q in queries:
+            # Should only contain the dmID condition
+            assert "charge" not in q
+
+
+# ===========================================================================
+# CorrectionBF – dependant_variable
+# ===========================================================================
+
+
+class TestCorrectionBF_DependantVariable:
+
+    def test_dependant_variable_set_from_info(self, corr_bf):
+        assert corr_bf.dependant_variable == "dmID"
+
+
+# ===========================================================================
+# CustomCorrection fixtures
+# ===========================================================================
+
+
+@pytest.fixture
+def custom_info():
+    return _make_custom_info()
+
+
+@pytest.fixture
+def corr_custom(custom_info):
+    return CustomCorrection(info=custom_info)
+
+
+@pytest.fixture
+def corr_custom_with_cov():
+    cov = np.diag([0.02**2, 0.03**2, 0.025**2]).tolist()
+    info = _make_custom_info(cov_matrix=cov)
+    info["my_cov"] = cov
+    # load_covariance_matrix reads key_matrix; give it the right key
+    return CustomCorrection(info=info)
+
+
+# ===========================================================================
+# CustomCorrection – construction / attributes
+# ===========================================================================
+
+
+class TestCustomCorrection_Properties:
+
+    def test_dependant_variable(self, corr_custom):
+        assert corr_custom.dependant_variable == "channel"
+
+    def test_central_values_length(self, corr_custom):
+        assert len(corr_custom.central_values) == 3
+
+    def test_central_values_correct(self, corr_custom):
+        np.testing.assert_allclose(corr_custom.central_values, [0.95, 1.00, 1.05])
+
+    def test_query_targets_set(self, corr_custom):
+        assert corr_custom.query_targets == ["ch_A", "ch_B", "ch_C"]
+
+    def test_unit_set(self, corr_custom):
+        assert corr_custom.unit == "GeV"
+
+    def test_title_set(self, corr_custom):
+        assert corr_custom.title == "Test Custom Correction"
+
+    def test_N_equals_central_values_length(self, corr_custom):
+        assert corr_custom.N == len(corr_custom.central_values)
+
+    def test_cov_matrix_none_when_not_provided(self, corr_custom):
+        assert corr_custom.cov_matrix is None
+
+
+# ===========================================================================
+# CustomCorrection – value_edges and value_mids
+# ===========================================================================
+
+
+class TestCustomCorrection_EdgesAndMids:
+
+    def test_value_edges_length(self, corr_custom):
+        assert len(corr_custom.value_edges) == corr_custom.N + 1
+
+    def test_value_edges_values(self, corr_custom):
+        np.testing.assert_array_equal(corr_custom.value_edges, np.arange(4))
+
+    def test_value_mids_length(self, corr_custom):
+        assert len(corr_custom.value_mids) == corr_custom.N
+
+    def test_value_mids_values(self, corr_custom):
+        np.testing.assert_array_almost_equal(corr_custom.value_mids, [0.5, 1.5, 2.5])
+
+    @pytest.mark.parametrize("n", [1, 2, 5])
+    def test_value_edges_for_various_n(self, n):
+        info = _make_custom_info(n=n)
+        corr = CustomCorrection(info=info)
+        assert len(corr.value_edges) == n + 1
+
+    @pytest.mark.parametrize("n", [1, 2, 5])
+    def test_value_mids_for_various_n(self, n):
+        info = _make_custom_info(n=n)
+        corr = CustomCorrection(info=info)
+        assert len(corr.value_mids) == n
+
+
+# ===========================================================================
+# CustomCorrection – visual_labels
+# ===========================================================================
+
+
+class TestCustomCorrection_VisualLabels:
+
+    def test_visual_labels_count(self, corr_custom):
+        assert len(corr_custom.visual_labels) == 3
+
+    def test_visual_labels_contain_variable(self, corr_custom):
+        for label in corr_custom.visual_labels:
+            assert "channel" in label
+
+    def test_visual_labels_contain_target(self, corr_custom):
+        for label, target in zip(corr_custom.visual_labels, corr_custom.query_targets):
+            assert target in label
+
+    def test_visual_labels_format(self, corr_custom):
+        assert corr_custom.visual_labels[0] == "channel = ch_A"
+        assert corr_custom.visual_labels[1] == "channel = ch_B"
+        assert corr_custom.visual_labels[2] == "channel = ch_C"
+
+    def test_visual_labels_non_empty_strings(self, corr_custom):
+        for label in corr_custom.visual_labels:
+            assert isinstance(label, str) and label.strip()
+
+
+# ===========================================================================
+# CustomCorrection – build_queries
+# ===========================================================================
+
+
+class TestCustomCorrection_BuildQueries:
+
+    def test_build_queries_returns_list(self, corr_custom):
+        assert isinstance(corr_custom.build_queries(), list)
+
+    def test_build_queries_length_matches_N(self, corr_custom):
+        assert len(corr_custom.build_queries()) == corr_custom.N
+
+    def test_build_queries_no_prefix(self, corr_custom):
+        queries = corr_custom.build_queries(prefix=None)
+        assert queries[0] == "channel == 'ch_A'"
+        assert queries[1] == "channel == 'ch_B'"
+        assert queries[2] == "channel == 'ch_C'"
+
+    def test_build_queries_with_prefix(self, corr_custom):
+        queries = corr_custom.build_queries(prefix="trk")
+        assert all("trk_channel ==" in q for q in queries)
+
+    def test_build_queries_targets_quoted(self, corr_custom):
+        for q in corr_custom.build_queries():
+            # targets are strings → must be single-quoted in the query
+            assert "'" in q
+
+    def test_build_queries_all_non_empty(self, corr_custom):
+        for q in corr_custom.build_queries():
+            assert isinstance(q, str) and q.strip()
+
+    def test_build_queries_default_prefix_is_none(self, corr_custom):
+        """Calling with no argument should behave the same as prefix=None."""
+        assert corr_custom.build_queries() == corr_custom.build_queries(prefix=None)
+
+
+# ===========================================================================
+# CustomCorrection – uncertainties / populate_uncertainties
+# ===========================================================================
+
+
+class TestCustomCorrection_Uncertainties:
+
+    def test_uncertainties_populated(self, corr_custom):
+        assert len(corr_custom.uncertainties) >= 1
+
+    def test_total_error_length(self, corr_custom):
+        assert len(corr_custom.total_error) == corr_custom.N
+
+    def test_total_error_positive(self, corr_custom):
+        assert np.all(corr_custom.total_error > 0)
+
+    def test_explicit_cov_uncertainty_added(self):
+        cov = np.diag([0.02**2, 0.03**2, 0.025**2])
+        info = _make_custom_info()
+        info["my_cov"] = cov.tolist()
+        corr = CustomCorrection(info=info)
+        assert "explicit_covariance" in corr.uncertainties
+
+    def test_explicit_cov_total_error_matches_diagonal(self):
+        cov = np.diag([0.02**2, 0.03**2, 0.025**2])
+        info = _make_custom_info()
+        info["my_cov"] = cov.tolist()
+        corr = CustomCorrection(info=info)
+        expected = np.sqrt(np.diag(cov))
+        np.testing.assert_allclose(corr.total_error, expected, rtol=1e-6)
+
+    def test_add_duplicate_uncertainty_raises(self, corr_custom):
+        from sysvar.uncertainties import FullyCorrelatedUncertainty
+
+        existing_name = next(iter(corr_custom.uncertainties))
+        with pytest.raises(UncertaintyWithSameNameExists):
+            corr_custom.add_uncertainty(
+                unc_name=existing_name,
+                unc_values=[0.01] * corr_custom.N,
+                unc_obj=FullyCorrelatedUncertainty,
+            )
+
+    def test_empty_uncertainties_total_error_raises(self, corr_custom):
+        corr_custom.uncertainties = {}
+        with pytest.raises(ValueError):
+            _ = corr_custom.total_error
+
+
+# ===========================================================================
+# CustomCorrection – edge cases
+# ===========================================================================
+
+
+class TestCustomCorrection_EdgeCases:
+
+    def test_single_bin(self):
+        info = _make_custom_info(n=1)
+        corr = CustomCorrection(info=info)
+        assert corr.N == 1
+        assert len(corr.visual_labels) == 1
+        assert len(corr.build_queries()) == 1
+        assert len(corr.value_edges) == 2
+        assert len(corr.value_mids) == 1
+
+    def test_many_bins(self):
+        n = 10
+        info = {
+            "dependant_variable": "ch",
+            "central_values": list(np.linspace(0.9, 1.1, n)),
+            "query_targets": [f"ch_{i}" for i in range(n)],
+            "unit": "",
+            "title": "large",
+            "uncertainties": {
+                "uncorrelated": {"stat": [0.01] * n},
+            },
+        }
+        corr = CustomCorrection(info=info)
+        assert corr.N == n
+        assert len(corr.value_edges) == n + 1
+        assert len(corr.value_mids) == n
+        assert len(corr.visual_labels) == n
+        assert len(corr.build_queries()) == n
+
+    def test_empty_unit_string(self):
+        info = _make_custom_info()
+        info["unit"] = ""
+        corr = CustomCorrection(info=info)
+        assert corr.unit == ""
