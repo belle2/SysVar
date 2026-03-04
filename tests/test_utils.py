@@ -336,7 +336,7 @@ class TestLoadFromTsvFile:
         """TSV branch returns a DataFrame (as per the implementation)."""
         tsv_file = tmp_path / "cov.tsv"
         pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=False
+            tsv_file, sep="\t", index=False, header=True
         )
         config = {"cov_matrix_path": str(tsv_file)}
         result = load_covariance_matrix(config)
@@ -345,7 +345,7 @@ class TestLoadFromTsvFile:
     def test_values_match(self, tmp_path):
         tsv_file = tmp_path / "cov.tsv"
         pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=False
+            tsv_file, sep="\t", index=False, header=True
         )
         config = {"cov_matrix_path": str(tsv_file)}
         result = load_covariance_matrix(config)
@@ -354,7 +354,7 @@ class TestLoadFromTsvFile:
     def test_shape_is_correct(self, tmp_path):
         tsv_file = tmp_path / "cov.tsv"
         pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=False
+            tsv_file, sep="\t", index=False, header=True
         )
         config = {"cov_matrix_path": str(tsv_file)}
         result = load_covariance_matrix(config)
@@ -363,7 +363,7 @@ class TestLoadFromTsvFile:
     def test_logs_info_when_loading_from_tsv(self, tmp_path, caplog):
         tsv_file = tmp_path / "cov.tsv"
         pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=False
+            tsv_file, sep="\t", index=False, header=True
         )
         config = {"cov_matrix_path": str(tsv_file)}
         with caplog.at_level(logging.INFO):
