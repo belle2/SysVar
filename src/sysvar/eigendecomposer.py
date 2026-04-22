@@ -36,6 +36,7 @@ class EigenDecomposer(ChannelTemplateHandler):
         settings: dict,
         syst_effect: str | dict | None = None,
         csv_path: str | None = None,
+        cov_matrix_path: str | None = None,
         title: str | None = None,
         verbose: bool = True,
         seed: int = 8311311,
@@ -77,7 +78,7 @@ class EigenDecomposer(ChannelTemplateHandler):
                 else csv_path
             )
             self.correction = create_correction_object(
-                syst_effect=None, MC_prod=None, csv_path=csv_path, title=title
+                syst_effect=None, MC_prod=None, csv_path=csv_path, cov_matrix_path=cov_matrix_path, title=title
             )
         # Handle YAML-based corrections
         elif syst_effect is not None:

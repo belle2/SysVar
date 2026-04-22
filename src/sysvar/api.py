@@ -123,6 +123,7 @@ def eigendecompose(
     settings: Dict,
     syst_effect: str,
     csv_path: str | None = None,
+    cov_matrix_path: str | None = None,
     criterion: str = "max_differences",
     prc: float = 1e-4,
     max_variations: int | None = None,
@@ -158,7 +159,7 @@ def eigendecompose(
     """
 
     if csv_path is not None:
-        egd = EigenDecomposer(df, settings, csv_path, verbose=verbose, seed=seed)
+        egd = EigenDecomposer(df, settings, csv_path, cov_matrix_path=cov_matrix_path, verbose=verbose, seed=seed)
     elif syst_effect is not None:
         warn(
                 "Deprecation warning: YAML-based corrections from the Performance group are deprecated since MC16rd and will be removed in a future release. "
