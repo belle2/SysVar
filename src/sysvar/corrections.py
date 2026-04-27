@@ -1472,12 +1472,12 @@ def create_correction_object(
         # Determine correction type from CSV structure
         try:
             test_table = read_csv(csv_path)
-            if "dependant_variable" in test_table.columns or "dependant_variable_1" in test_table.columns:
-                csv_type = "1D"
+            if "dependant_variable_1" in test_table.columns and "dependant_variable_2" in test_table.columns and "dependant_variable_3" in test_table.columns:
+                csv_type = "3D"
             elif "dependant_variable_1" in test_table.columns and "dependant_variable_2" in test_table.columns:
                 csv_type = "2D"
-            elif "dependant_variable_1" in test_table.columns and "dependant_variable_2" in test_table.columns and "dependant_variable_3" in test_table.columns:
-                csv_type = "3D"
+            elif "dependant_variable" in test_table.columns or "dependant_variable_1" in test_table.columns:
+                csv_type = "1D"
             else:
                 raise ValueError("Cannot determine CSV correction type from columns. Please specify csv_type.")
         except Exception as e:
