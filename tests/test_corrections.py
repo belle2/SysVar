@@ -786,18 +786,21 @@ def _make_custom_info(
     cov_matrix: list | None = None,
 ):
     """Return a minimal info dict for CustomCorrection."""
+    central_values = (np.linspace(0.95, 1.05, n)).tolist()
+    query_targets = [f"ch_{i}" for i in range(n)]
+
     info = {
         "dependant_variable": "channel",
-        "central_values": [0.95, 1.00, 1.05][:n],
-        "query_targets": ["ch_A", "ch_B", "ch_C"][:n],
+        "central_values": central_values,
+        "query_targets": query_targets,
         "unit": "GeV",
         "title": "Test Custom Correction",
         "uncertainties": {
             "fully_correlated": {
-                "sys": [0.02, 0.03, 0.025][:n],
+                "sys": [0.02] * n,
             },
             "uncorrelated": {
-                "stat": [0.01, 0.01, 0.01][:n],
+                "stat": [0.01] * n,
             },
         },
     }
@@ -1091,7 +1094,7 @@ class TestCustomCorrection_Properties:
         np.testing.assert_allclose(corr_custom.central_values, [0.95, 1.00, 1.05])
 
     def test_query_targets_set(self, corr_custom):
-        assert corr_custom.query_targets == ["ch_A", "ch_B", "ch_C"]
+        assert corr_custom.query_targets == ["ch_0", "ch_1", "ch_2"]
 
     def test_unit_set(self, corr_custom):
         assert corr_custom.unit == "GeV"
@@ -1157,9 +1160,9 @@ class TestCustomCorrection_VisualLabels:
             assert target in label
 
     def test_visual_labels_format(self, corr_custom):
-        assert corr_custom.visual_labels[0] == "channel = ch_A"
-        assert corr_custom.visual_labels[1] == "channel = ch_B"
-        assert corr_custom.visual_labels[2] == "channel = ch_C"
+        assert corr_custom.visual_labels[0] == "channel = ch_0"
+        assert corr_custom.visual_labels[1] == "channel = ch_1"
+        assert corr_custom.visual_labels[2] == "channel = ch_2"
 
     def test_visual_labels_non_empty_strings(self, corr_custom):
         for label in corr_custom.visual_labels:
@@ -1181,9 +1184,9 @@ class TestCustomCorrection_BuildQueries:
 
     def test_build_queries_no_prefix(self, corr_custom):
         queries = corr_custom.build_queries(prefix=None)
-        assert queries[0] == "channel == 'ch_A'"
-        assert queries[1] == "channel == 'ch_B'"
-        assert queries[2] == "channel == 'ch_C'"
+        assert queries[0] == "channel == 'ch_0'"
+        assert queries[1] == "channel == 'ch_1'"
+        assert queries[2] == "channel == 'ch_2'"
 
     def test_build_queries_with_prefix(self, corr_custom):
         queries = corr_custom.build_queries(prefix="trk")
