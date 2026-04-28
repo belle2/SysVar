@@ -4,7 +4,10 @@ import pytest
 import numpy as np
 
 from sysvar import uncertainties
-from sysvar.uncertainties import ExplicitlyCorrelatedUncertainty
+from sysvar.uncertainties import (
+    ExplicitlyCorrelatedUncertainty,
+    FullyCorrelatedUncertaintyInParts,
+)
 
 
 shared_params = [
@@ -43,12 +46,48 @@ def test_uncertainty_initialization(uncertainty_type, name, errors, string_bound
     """
     uncertainty_class = uncertainties.get_uncertainty_types()[uncertainty_type]
     extra_params = subclass_params.get(uncertainty_type, {})
-    uncertainty = uncertainty_class(
-        name=name, errors=errors, string_boundaries=string_boundaries, **extra_params
-    )
 
-    assert uncertainty.name == name
-    np.testing.assert_array_equal(uncertainty.errors, errors)
+    if uncertainty_type != "fully_correlated_in_parts":
+        uncertainty = uncertainty_class(
+            name=name,
+            errors=errors,
+            string_boundaries=string_boundaries,
+            **extra_params,
+        )
+        assert uncertainty.name == name
+        np.testing.assert_array_equal(uncertainty.errors, errors)
+    else:
+        with pytest.raises(NotImplementedError):
+            uncertainty = uncertainty_class(
+                name=name,
+                errors=errors,
+                string_boundaries=string_boundaries,
+                **extra_params,
+            )
+
+
+def test_uncertainty_initialization_fully_correlated_in_parts_raise_not_implemented():
+    """Test initialization of uncertainty instances.
+
+    Args:
+        uncertainty_type (str): The type of uncertainty (e.g., 'uncorrelated').
+        name (str): Name of the uncertainty instance.
+        errors (np.ndarray): Array of error values.
+        string_boundaries (List[str]): List of string representations of intervals.
+
+    Asserts:
+        The instance is correctly initialized with expected name and error array.
+    """
+    uncertainty_class = FullyCorrelatedUncertaintyInParts
+    extra_params = subclass_params.get("fully_correlated_in_parts", {})
+    name, errors, string_boundaries = shared_params[0]
+    with pytest.raises(NotImplementedError):
+        uncertainty = uncertainty_class(
+            name=name,
+            errors=errors,
+            string_boundaries=string_boundaries,
+            **extra_params,
+        )
 
 
 shared_params_invalid_errors = [
@@ -337,13 +376,21 @@ def test_expected_covariance_per_subclass(
         Actual covariance matrix matches the expected one.
     """
     string_boundaries = ["[0-1]", "[1-2]", "[2-3]"]
-    uncertainty_class = uncertainties.get_uncertainty_types()[uncertainty_type]
+    if uncertainty_type != "fully_correlated_in_parts":
+        uncertainty_class = uncertainties.get_uncertainty_types()[uncertainty_type]
 
-    uncertainty = uncertainty_class(
-        name="test", errors=errors, string_boundaries=string_boundaries, **extra
-    )
+        uncertainty = uncertainty_class(
+            name="test", errors=errors, string_boundaries=string_boundaries, **extra
+        )
 
-    np.testing.assert_allclose(uncertainty.cov_matrix, expected_cov)
+        np.testing.assert_allclose(uncertainty.cov_matrix, expected_cov)
+    else:
+        uncertainty_class = FullyCorrelatedUncertaintyInParts
+        with pytest.raises(NotImplementedError):
+            uncertainty = uncertainty_class(
+                name="test", errors=errors, string_boundaries=string_boundaries, **extra
+            )
+    string_boundaries = ["[0-1]", "[1-2]", "[2-3]"]
 
 
 @pytest.mark.parametrize(

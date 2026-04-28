@@ -39,6 +39,7 @@ from sysvar.corrections import (
     CorrectionBF,
     CustomCorrection,
 )
+from sysvar.uncertainties import FullyCorrelatedUncertaintyInParts
 
 
 # ===========================================================================
@@ -966,8 +967,14 @@ class TestCorrectionBF_Uncertainties:
         with patch("sysvar.corrections.read_yaml", return_value=info), patch(
             "sysvar.corrections.load_covariance_matrix", return_value=None
         ):
-            corr = CorrectionBF(systematic="x", MC_production="y")
-        assert "BF_unc" in corr.uncertainties
+            if correlation != "fully_correlated_in_parts":
+                corr = CorrectionBF(systematic="x", MC_production="y")
+                uncertainty = corr.uncertainties.get("BF_unc")
+            else:
+                with pytest.raises(NotImplementedError):
+                    uncertainty = FullyCorrelatedUncertaintyInParts(
+                        name="test", errors=[], string_boundaries=[], part_dimensions=0
+                    )
 
     def test_explicitly_correlated_raises_not_implemented(self):
         info = _make_bf_info(correlation="explicitly_correlated")
