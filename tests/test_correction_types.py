@@ -19,7 +19,7 @@ CONFIG_DIR = path.join(_get_parent_dir(), _get_configs_dir("csv_configs"))
 
 
 @pytest.mark.parametrize(
-    "syst_effect, MC_prod, expected_cls",
+    "correction_source, MC_production, expected_cls",
     [
         ("charged_slow_pi", "MC15rd", Correction1D),
         ("neutral_slow_pi", "MC15rd", Correction1D),
@@ -34,10 +34,12 @@ CONFIG_DIR = path.join(_get_parent_dir(), _get_configs_dir("csv_configs"))
     ],
 )
 def test_create_correction_object_yaml_only_parametrized(
-    syst_effect, MC_prod, expected_cls
+    correction_source, MC_production, expected_cls
 ):
 
-    correction = create_correction_object(syst_effect=syst_effect, MC_prod=MC_prod)
+    correction = create_correction_object(
+        correction_source=correction_source, MC_production=MC_production
+    )
 
     assert isinstance(correction, expected_cls)
 
@@ -57,13 +59,13 @@ def test_create_correction_object_custom_returns_custom_correction():
         "cov_matrix": None,
     }
 
-    correction = create_correction_object(syst_effect=info)
+    correction = create_correction_object(correction_source=info)
 
     assert isinstance(correction, CustomCorrection)
 
 
 @pytest.mark.parametrize(
-    "title, csv_path, cov_matrix_path, expected_cls",
+    "title, correction_source, cov_matrix_path, expected_cls",
     [
         (
             "charged_slow_pi",
@@ -92,12 +94,11 @@ def test_create_correction_object_custom_returns_custom_correction():
     ],
 )
 def test_create_correction_object_csv_only_parametrized(
-    title, csv_path, cov_matrix_path, expected_cls
+    title, correction_source, cov_matrix_path, expected_cls
 ):
 
     correction = create_correction_object(
-        syst_effect=None,
-        csv_path=csv_path,
+        correction_source=correction_source,
         cov_matrix_path=cov_matrix_path,
         title=title,
     )

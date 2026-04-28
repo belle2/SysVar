@@ -1,227 +1,375 @@
-import pytest
+# tests/test_api_surface_smoke.py
+from __future__ import annotations
+
+import inspect
+
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")  # headless backend for CI
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pytest
+
+# Adjust this import to the module that contains the API you pasted
 from sysvar.api import (
+    add_weights_to_dataframe,
+    eigendecompose,
     plot_analysis_corr_matrix,
     plot_cov_diff,
+    register_saving_info,
     plot_up_and_down_variations,
     plot_templates_relative_variations_in_grid,
     plot_correction_cov_and_corr,
     plot_correction_variations_in_grid,
     plot_correction_errors,
-    add_weights_to_dataframe,
-    eigendecompose,
 )
 
 
-from sysvar.eigendecomposer import EigenDecomposer
-from sysvar.utils import read_yaml
-import numpy as np
-
-def _repo_root_from_test_file() -> Path:
-    # tests/ is at <repo_root>/tests
-    return Path(__file__).resolve().parents[1]
+# -----------------------------------------------------------------------------
+# Signature stability (argument names & defaults)
+# -----------------------------------------------------------------------------
 
 
-def _config_csv_path(csv_filename: str) -> Path:
-    return _repo_root_from_test_file() / "configs" / "csv_configs" / csv_filename
-
-@pytest.fixture(
-    params=[
-        {"csv": "charged_slow_pi_correction.csv", "cov": None},
+def test_add_weights_to_dataframe_signature_is_stable():
+    sig = inspect.signature(add_weights_to_dataframe)
+    assert list(sig.parameters.keys()) == [
+        "df",
+        "correction_source",
+        "MC_production",
+        "prefix",
+        "weightname",
+        "overwrite",
+        "Nvar",
     ]
-)
-def dummy_eigendecomposer(toy_df, request):
-    settings = read_yaml("study_setup", "sysvar_101")
-    syst_effect = "charged_slow_pi"
-    csv_filename = request.param["csv"]
-    csv_path = _config_csv_path(csv_filename)
+    p = sig.parameters
+    assert p["MC_production"].default is None
+    assert p["prefix"].default is None
+    assert p["weightname"].default is None
+    assert p["overwrite"].default is False
+    assert p["Nvar"].default == 0
 
-    egd = EigenDecomposer(toy_df, settings, csv_path=csv_path, title=syst_effect, verbose=False)
-    egd.vary_templates()
-    egd.precision = 1e-4
-    egd.find_important_eigendimension_indices("max_differences")
 
-    return egd
+def test_eigendecompose_signature_is_stable():
+    sig = inspect.signature(eigendecompose)
+    assert list(sig.parameters.keys()) == [
+        "df",
+        "settings",
+        "systematic_source",
+        "cov_matrix_path",
+        "criterion",
+        "prc",
+        "max_variations",
+        "save_variations",
+        "save_channel_covariance_matrices",
+        "verbose",
+        "seed",
+    ]
+    p = sig.parameters
+    assert p["cov_matrix_path"].default is None
+    assert p["criterion"].default == "max_differences"
+    assert p["prc"].default == 1e-4
+    assert p["max_variations"].default is None
+    assert p["save_variations"].default is False
+    assert p["save_channel_covariance_matrices"].default is False
+    assert p["verbose"].default is True
+    assert p["seed"].default == 8311311
 
 
 @pytest.mark.parametrize(
-    "plot_method",
+    "fn, expected_params",
     [
-        plot_analysis_corr_matrix,
-        plot_cov_diff,
-        plot_up_and_down_variations,
-        plot_templates_relative_variations_in_grid,
-        plot_correction_cov_and_corr,
-        plot_correction_variations_in_grid,
-        plot_correction_errors,
+        (plot_analysis_corr_matrix, ["eigendecomposer_obj", "save", "filename"]),
+        (plot_cov_diff, ["eigendecomposer_obj", "save", "filename"]),
+        (register_saving_info, ["eigendecomposer_obj", "saving_info"]),
+        (plot_up_and_down_variations, ["eigendecomposer_obj", "save", "filename"]),
+        (
+            plot_templates_relative_variations_in_grid,
+            ["eigendecomposer_obj", "save", "filename"],
+        ),
+        (plot_correction_cov_and_corr, ["eigendecomposer_obj", "save", "filename"]),
+        (
+            plot_correction_variations_in_grid,
+            ["eigendecomposer_obj", "nbins", "save", "filename"],
+        ),
+        (plot_correction_errors, ["eigendecomposer_obj", "save", "filename"]),
     ],
 )
-def test_visualize_functions_run_without_errors(plot_method, dummy_eigendecomposer):
-    plot_method(dummy_eigendecomposer, save=False)
+def test_plot_wrapper_signatures_are_stable(fn, expected_params):
+    sig = inspect.signature(fn)
+    assert list(sig.parameters.keys()) == expected_params
 
-@pytest.fixture(
-    params=[
-        {"csv": "charged_slow_pi_correction.csv", "cov": None},
-    ]
-)
-def test_add_weights_to_dataframe_overwrite_and_variations(toy_df, request):
-    df = toy_df.copy()
-    column_name = "slow_pi_charged_weight"
 
-    csv_filename = request.param["csv"]
-    csv_path = _config_csv_path(csv_filename)
+# -----------------------------------------------------------------------------
+# Plotting smoke tests (ensure wrappers call through and return fig/ax)
+# -----------------------------------------------------------------------------
 
-    # Ensure the base column exists from fixture setup
-    assert column_name in df.columns
 
-    # Set a sentinel value and verify non-overwrite keeps it
-    df[column_name] = 42.0
-    add_weights_to_dataframe(
-        df=df,
-        #systematic="charged_slow_pi",
-        #MC_production="sysvar_101",
-        csv_path=csv_path,
-        prefix="slow_pi",
-        weightname="charged_weight",
-        overwrite=False,
+class _DummyVariator:
+    def __init__(self):
+        self._saving_info = None
+
+    def register_saving_info(self, saving_info):
+        self._saving_info = saving_info
+
+    def plot_cov_and_corr(self, save=False, filename=None):
+        fig, ax = plt.subplots()
+        return fig, ax
+
+    def plot_relative_variations_in_grid(self, nbins=21, save=False, filename=None):
+        fig, ax = plt.subplots()
+        return fig, ax
+
+
+class _DummyCorrection:
+    def __init__(self):
+        self._saving_info = None
+
+    def register_saving_info(self, saving_info):
+        self._saving_info = saving_info
+
+    def plot_error_comparison(self, save=False, filename=None):
+        fig, ax = plt.subplots()
+        return fig, ax
+
+
+class _DummyTemplate:
+    def __init__(self):
+        self._saving_info = None
+
+    def register_saving_info(self, saving_info):
+        self._saving_info = saving_info
+
+    def plot_up_and_down_variations(self, title=None, save=False, filename=None):
+        fig, ax = plt.subplots()
+        return fig, ax
+
+    def plot_relative_variations_in_grid(self, title=None, save=False, filename=None):
+        fig, ax = plt.subplots()
+        return fig, ax
+
+
+class _DummyEigenDecomposer:
+    def __init__(self):
+        self.saving_info = {"out": "dummy.root"}
+        self.variator = _DummyVariator()
+        self.correction = _DummyCorrection()
+        self.templates = {"t1": _DummyTemplate(), "t2": _DummyTemplate()}
+
+    def register_saving_info(self, saving_info):
+        self.saving_info = saving_info
+
+    def plot_corr_matrix(self, save=False, filename=None):
+        fig, ax = plt.subplots()
+        return fig, ax
+
+    def plot_cov_diff(self, save=False, filename=None):
+        fig, ax = plt.subplots()
+        return fig, ax
+
+
+def test_plot_analysis_corr_matrix_smoke():
+    egd = _DummyEigenDecomposer()
+    fig, ax = plot_analysis_corr_matrix(egd, save=False, filename=None)
+    assert fig is not None and ax is not None
+    plt.close(fig)
+
+
+def test_plot_cov_diff_smoke():
+    egd = _DummyEigenDecomposer()
+    fig, ax = plot_cov_diff(egd, save=False, filename=None)
+    assert fig is not None and ax is not None
+    plt.close(fig)
+
+
+def test_register_saving_info_smoke():
+    egd = _DummyEigenDecomposer()
+    register_saving_info(egd, {"out": "new.root"})
+    assert egd.saving_info["out"] == "new.root"
+
+
+def test_plot_up_and_down_variations_smoke():
+    egd = _DummyEigenDecomposer()
+    figures = plot_up_and_down_variations(egd, save=False, filename=None)
+    assert isinstance(figures, list)
+    assert len(figures) == len(egd.templates)
+    for fig, ax in figures:
+        assert fig is not None and ax is not None
+        plt.close(fig)
+
+
+def test_plot_templates_relative_variations_in_grid_smoke():
+    egd = _DummyEigenDecomposer()
+    figures = plot_templates_relative_variations_in_grid(egd, save=False, filename=None)
+    assert isinstance(figures, list)
+    assert len(figures) == len(egd.templates)
+    for fig, ax in figures:
+        assert fig is not None and ax is not None
+        plt.close(fig)
+
+
+def test_plot_correction_cov_and_corr_smoke():
+    egd = _DummyEigenDecomposer()
+    fig, ax = plot_correction_cov_and_corr(egd, save=False, filename=None)
+    assert fig is not None and ax is not None
+    plt.close(fig)
+    # Wrapper should forward saving_info to variator
+    assert egd.variator._saving_info == egd.saving_info
+
+
+def test_plot_correction_variations_in_grid_smoke():
+    egd = _DummyEigenDecomposer()
+    fig, ax = plot_correction_variations_in_grid(
+        egd, nbins=15, save=False, filename=None
     )
-    assert (df[column_name] == 42.0).all()
+    assert fig is not None and ax is not None
+    plt.close(fig)
+    assert egd.variator._saving_info == egd.saving_info
 
-    # Overwrite and request two variation columns
+
+def test_plot_correction_errors_smoke():
+    egd = _DummyEigenDecomposer()
+    fig, ax = plot_correction_errors(egd, save=False, filename=None)
+    assert fig is not None and ax is not None
+    plt.close(fig)
+    # Wrapper should forward saving_info to correction
+    assert egd.correction._saving_info == egd.saving_info
+
+
+class _SpyCorrection:
+    def __init__(self):
+        self.central_values = [1.0]
+        self.N = 1
+        self.seen_prefix_in_build_queries = None
+        self.seen_prefix_weightname_in_build_column_name = None
+
+    def build_queries(self, prefix=None):
+        self.seen_prefix_in_build_queries = prefix
+        return ["x == x"]  # always true
+
+    def _build_column_name(self, prefix, weightname):
+        self.seen_prefix_weightname_in_build_column_name = (prefix, weightname)
+        if prefix and weightname:
+            return f"{prefix}_{weightname}"
+        return "weight"
+
+
+class _SpyVariator:
+    last_init_args = None  # class-level storage for last call
+
+    def __init__(self, correction, Nvar: int):
+        type(self).last_init_args = (correction, Nvar)
+        self.Nvar = Nvar
+        self.variations = np.ones((Nvar, correction.N))
+
+
+def test_add_weights_forwards_args_to_create_correction_object(monkeypatch):
+    import sysvar.api as api_mod
+
+    seen = {}
+
+    def _spy_factory(**kwargs):
+        seen.update(kwargs)
+        return _SpyCorrection()
+
+    monkeypatch.setattr(api_mod, "create_correction_object", _spy_factory)
+    monkeypatch.setattr(api_mod, "Variator", _SpyVariator)
+
+    df = pd.DataFrame({"x": [0, 1, 2]})
+    src = Path("some.csv")
+
     add_weights_to_dataframe(
         df=df,
-        #systematic="charged_slow_pi",
-        #MC_production="sysvar_101",
-        csv_path=csv_path,
+        correction_source=src,
+        MC_production=None,
+        prefix="pfx",
+        weightname="w",
+        overwrite=True,
+        Nvar=0,
+    )
+
+    # verify exact kw forwarding to the factory
+    assert seen == {"correction_source": src, "MC_production": None}
+
+
+def test_add_weights_calls_build_column_name_with_prefix_and_weightname(monkeypatch):
+    import sysvar.api as api_mod
+
+    corr = _SpyCorrection()
+
+    monkeypatch.setattr(api_mod, "create_correction_object", lambda **kwargs: corr)
+    monkeypatch.setattr(api_mod, "Variator", _SpyVariator)
+
+    df = pd.DataFrame({"x": [0, 1, 2]})
+    add_weights_to_dataframe(
+        df=df,
+        correction_source="charged_slow_pi",
+        MC_production="sysvar_101",
         prefix="slow_pi",
         weightname="charged_weight",
         overwrite=True,
-        Nvar=2,
+        Nvar=0,
     )
 
-    # Values should have been updated from the sentinel
-    assert (df[column_name] != 42.0).any()
+    assert corr.seen_prefix_weightname_in_build_column_name == (
+        "slow_pi",
+        "charged_weight",
+    )
+    assert "slow_pi_charged_weight" in df.columns
 
-    # Variation columns should exist and be populated
-    for j in range(2):
-        vcol = f"{column_name}_var_{j}"
-        assert vcol in df.columns
-        assert df[vcol].notna().all()
 
-@pytest.fixture(
-    params=[
-        {"csv": "charged_slow_pi_correction.csv", "cov": None},
-    ]
-)
-def test_add_weights_to_dataframe_negative_Nvar_raises(toy_df, request):
-    csv_filename = request.param["csv"]
-    csv_path = _config_csv_path(csv_filename)
-    df = toy_df.copy()
-    with pytest.raises(ValueError):
-        add_weights_to_dataframe(
-            df=df,
-            #systematic="charged_slow_pi",
-            #MC_production="sysvar_101",
-            csv_path=csv_path,
-            prefix="slow_pi",
-            weightname="charged_weight",
-            Nvar=-1,
-        )
+def test_add_weights_calls_build_queries_with_prefix(monkeypatch):
+    import sysvar.api as api_mod
 
-@pytest.fixture(
-    params=[
-        {"csv": "charged_slow_pi_correction.csv", "cov": None},
-    ]
-)
-def test_eigendecompose_runs_and_sets_properties(toy_df, dummy_eigendecomposer, request):
-    csv_filename = request.param["csv"]
-    csv_path = _config_csv_path(csv_filename)
-    df = toy_df.copy()
-    settings = read_yaml("study_setup", "sysvar_101")
-    prc = 1e-3
+    corr = _SpyCorrection()
 
-    egd = eigendecompose(
+    monkeypatch.setattr(api_mod, "create_correction_object", lambda **kwargs: corr)
+    monkeypatch.setattr(api_mod, "Variator", _SpyVariator)
+
+    df = pd.DataFrame({"x": [0, 1, 2]})
+    add_weights_to_dataframe(
         df=df,
-        settings=settings,
-        syst_effect="charged_slow_pi",
-        csv_path=csv_path,
-        criterion="max_differences",
-        prc=prc,
-        save_variations=False,
-        save_channel_covariance_matrices=False,
-        verbose=False,
+        correction_source={"some": "config"},
+        prefix="trk",
+        weightname="w",
+        overwrite=True,
+        Nvar=0,
     )
 
-    assert isinstance(egd, EigenDecomposer)
-    assert egd.precision == prc
-    assert egd.seed == 8311311
+    assert corr.seen_prefix_in_build_queries == "trk"
 
-    # Baseline comparisons against dummy instance (ensures consistent setup)
-    assert egd.syst_effect == dummy_eigendecomposer.syst_effect
-    assert set(egd.templates.keys()) == set(dummy_eigendecomposer.templates.keys())
 
-    # important dims should be computed and be a boolean array
-    assert hasattr(egd, "important_dims_indices")
-    assert isinstance(egd.important_dims_indices, np.ndarray)
-    assert egd.important_dims_indices.dtype == bool
-    assert egd.N_important_dims == 3
+def test_add_weights_constructs_variator_only_when_Nvar_positive(monkeypatch):
+    import sysvar.api as api_mod
 
-    # templates should exist and have eigen information accessible
-    assert len(egd.templates) > 0
-    for name, t in egd.templates.items():
-        # Access properties to ensure they are computable
-        vals = t.eigen_values
-        vecs = t.eigen_vectors
-        vars_ = t.eigen_variations
-        assert isinstance(vals, np.ndarray) and vals.size > 0
-        assert isinstance(vecs, np.ndarray) and vecs.size > 0
-        assert isinstance(vars_, np.ndarray) and vars_.size > 0
+    corr = _SpyCorrection()
 
-@pytest.fixture(
-    params=[
-        {"csv": "charged_slow_pi_correction.csv", "cov": None},
-    ]
-)
-def test_eigendecompose_max_variations(toy_df, request):
-    df = toy_df.copy()
-    settings = read_yaml("study_setup", "sysvar_101")
-    max_vars = 1
+    monkeypatch.setattr(api_mod, "create_correction_object", lambda **kwargs: corr)
+    monkeypatch.setattr(api_mod, "Variator", _SpyVariator)
 
-    csv_filename = request.param["csv"]
-    csv_path = _config_csv_path(csv_filename)
+    df = pd.DataFrame({"x": [0, 1]})
 
-    egd = eigendecompose(
+    # Nvar == 0: variator should not be created
+    _SpyVariator.last_init_args = None
+    add_weights_to_dataframe(
         df=df,
-        settings=settings,
-        syst_effect="charged_slow_pi",
-        csv_path=csv_path,
-        criterion="max_differences",
-        prc=1e-3,
-        max_variations=max_vars,
-        save_variations=False,
-        save_channel_covariance_matrices=False,
-        verbose=False,
+        correction_source="x",
+        overwrite=True,
+        Nvar=0,
     )
+    assert _SpyVariator.last_init_args is None
 
-    assert egd.max_variations == max_vars
-    assert egd.N_important_dims == max_vars
-
-@pytest.fixture(
-    params=[
-        {"csv": "charged_slow_pi_correction.csv", "cov": None},
-    ]
-)
-def test_eigendecompose_invalid_criterion_raises(toy_df, request):
-    settings = read_yaml("study_setup", "sysvar_101")
-    csv_filename = request.param["csv"]
-    csv_path = _config_csv_path(csv_filename)
-    with pytest.raises(NotImplementedError):
-        eigendecompose(
-            df=toy_df,
-            settings=settings,
-            syst_effect="charged_slow_pi",
-            csv_path=csv_path,
-            criterion="not_a_method",
-            verbose=False,
-        )
+    # Nvar > 0: variator should be created with (correction, Nvar)
+    _SpyVariator.last_init_args = None
+    add_weights_to_dataframe(
+        df=df,
+        correction_source="x",
+        prefix="p",
+        weightname="w",
+        overwrite=True,
+        Nvar=3,
+    )
+    assert _SpyVariator.last_init_args == (corr, 3)

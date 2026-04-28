@@ -1541,18 +1541,16 @@ class CorrectionPID(BaseCorrectionFromYaml):
 
 
 def create_correction_object(
-    syst_effect: str | dict | None,
-    MC_prod: str | None = None,
-    csv_path: str | None = None,
+    correction_source: str | Path | dict,
+    MC_production: str | None = None,
     title: str | None = None,
     cov_matrix_path: str | None = None,
 ) -> BaseCorrection:
     """Retrieves and creates the appropriate correction object based on the systematic effect and MC production type.
 
     Args:
-        syst_effect (str): The systematic effect identifier for YAML-based corrections, or CSV file path for CSV-based corrections.
-        MC_prod (str, optional): The Monte Carlo production type identifier. Required for YAML-based corrections.
-        csv_path (str, optional): Path to CSV file for CSV-based corrections. If provided, syst_effect is ignored.
+        correcction source (str): The systematic effect identifier for YAML-based corrections, or CSV file path for CSV-based corrections.
+        MC_production (str, optional): The Monte Carlo production type identifier. Required for YAML-based corrections.
         title (str, optional): Title for CSV-based corrections. If not provided, will use filename.
         cov_matrix_path (str, optional): Path to explicit covariance matrix file for CSV-based corrections.
 
@@ -1592,13 +1590,15 @@ def create_correction_object(
     }
 
     # Handle CSV-based corrections
-    if csv_path is not None:
-        if not path.exists(csv_path):
-            raise ValueError(f"CSV file not found: {csv_path}")
+    if isinstance(correction_source, (Path)) or (
+        isinstance(correction_source, str) and correction_source.endswith(".csv")
+    ):
+        if not path.exists(correction_source):
+            raise ValueError(f"CSV file not found: {correction_source}")
 
         # Determine correction type from CSV structure
         try:
-            test_table = read_csv(csv_path)
+            test_table = read_csv(correction_source)
             if (
                 "dependant_variable_1" in test_table.columns
                 and "dependant_variable_2" in test_table.columns
@@ -1620,7 +1620,7 @@ def create_correction_object(
                     "Cannot determine CSV correction type from columns. Please specify csv_type."
                 )
         except Exception as e:
-            raise ValueError(f"Error reading CSV file {csv_path}: {e}")
+            raise ValueError(f"Error reading CSV file {correction_source}: {e}")
 
         if csv_type not in csv_correction_types:
             raise NotImplementedError(
@@ -1628,20 +1628,20 @@ def create_correction_object(
             )
 
         return csv_correction_types[csv_type](
-            csv_path=csv_path, title=title, cov_matrix_path=cov_matrix_path
+            csv_path=correction_source, title=title, cov_matrix_path=cov_matrix_path
         )
 
     # Handle YAML-based corrections
-    elif isinstance(syst_effect, str):
-        MC_prod = MC_prod if MC_prod is not None else ""
-        if MC_prod == "":
-            raise ValueError("MC_prod is required for YAML-based corrections")
+    elif isinstance(correction_source, str) and MC_production is not None:
+        MC_production = MC_production if MC_production is not None else ""
+        if MC_production == "":
+            raise ValueError("MC_production is required for YAML-based corrections")
 
-        corr_type = read_yaml(syst_effect, MC_prod)["correction_type"]
+        corr_type = read_yaml(correction_source, MC_production)["correction_type"]
 
         try:
             return correction_types[corr_type](
-                systematic=syst_effect, MC_production=MC_prod
+                systematic=correction_source, MC_production=MC_production
             )
         except KeyError:
             raise NotImplementedError(
@@ -1649,8 +1649,8 @@ def create_correction_object(
             )
 
     # Handle custom corrections
-    elif isinstance(syst_effect, dict):
-        return CustomCorrection(info=syst_effect)
+    elif isinstance(correction_source, dict):
+        return CustomCorrection(info=correction_source)
 
     else:
         raise ValueError(
