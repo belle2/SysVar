@@ -54,6 +54,7 @@ def test_create_correction_object_custom_returns_custom_correction():
             "fully_correlated": {"sys": [0.02, 0.03, 0.025]},
             "uncorrelated": {"stat": [0.01, 0.01, 0.01]},
         },
+        "cov_matrix": None,
     }
 
     correction = create_correction_object(syst_effect=info)

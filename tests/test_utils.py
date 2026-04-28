@@ -213,29 +213,28 @@ class TestCov2Corr:
 
 
 """
-Tests for the load_covariance_matrix utility function.
+Tests for the load_covariance_matrix utility function (new API).
 
-Covers:
-  - Loading directly from a config dict (key_matrix)
-  - Loading from a .npy file (key_path)
-  - Loading from a .tsv file (key_path)
-  - Loading from a .csv file (key_path, default delimiter)
-  - Returns None when neither key is present
-  - Logging behaviour (info vs warning)
+Contract (current implementation):
+  - config MUST contain `key` (default: 'cov_matrix') else KeyError
+  - If config[key] is None: return None (and log INFO)
+  - If config[key] is a path (str/Path): load from file
+      * .npy -> np.load
+      * .tsv -> pd.read_csv(...).to_numpy()
+      * else -> np.loadtxt(..., delimiter=",")
+  - If config[key] is array-like (list/tuple/np.ndarray): return np.ndarray
+  - Else: ValueError
 """
 
 import logging
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
-# Adjust import to wherever the function lives in your package
 from sysvar.utils import load_covariance_matrix
 
-
-# ---------------------------------------------------------------------------
-# Shared reference data
-# ---------------------------------------------------------------------------
 
 REFERENCE_MATRIX = np.array(
     [
@@ -246,261 +245,111 @@ REFERENCE_MATRIX = np.array(
 )
 
 
-# ===========================================================================
-# Loading from the config dict directly (key_matrix branch)
-# ===========================================================================
+class TestKeyHandling:
 
+    def test_missing_key_raises_keyerror(self):
+        with pytest.raises(KeyError, match="cov_matrix"):
+            load_covariance_matrix({})
 
-class TestLoadFromConfigKey:
+    def test_custom_key_missing_raises_keyerror(self):
+        with pytest.raises(KeyError, match="my_key"):
+            load_covariance_matrix({}, key="my_key")
 
-    def test_returns_ndarray_when_key_matrix_present(self):
-        config = {"my_cov": REFERENCE_MATRIX.tolist()}
-        result = load_covariance_matrix(config, key_matrix="my_cov")
-        assert isinstance(result, np.ndarray)
-
-    def test_values_match_when_loaded_from_config(self):
-        config = {"my_cov": REFERENCE_MATRIX.tolist()}
-        result = load_covariance_matrix(config, key_matrix="my_cov")
-        np.testing.assert_array_almost_equal(result, REFERENCE_MATRIX)
-
-    def test_key_matrix_takes_priority_over_key_path(self, tmp_path):
-        """key_matrix branch must be preferred when both keys are present."""
-        npy_file = tmp_path / "other.npy"
-        np.save(npy_file, np.eye(3))
-
-        config = {
-            "my_cov": REFERENCE_MATRIX.tolist(),
-            "cov_matrix_path": str(npy_file),
-        }
-        result = load_covariance_matrix(config, key_matrix="my_cov")
-        np.testing.assert_array_almost_equal(result, REFERENCE_MATRIX)
-
-    def test_ndarray_input_is_preserved(self):
-        """Passing an ndarray directly in the config should work too."""
-        config = {"my_cov": REFERENCE_MATRIX}
-        result = load_covariance_matrix(config, key_matrix="my_cov")
-        np.testing.assert_array_almost_equal(result, REFERENCE_MATRIX)
-
-    def test_logs_info_when_loading_from_key_matrix(self, caplog):
-        config = {"my_cov": REFERENCE_MATRIX.tolist()}
+    def test_none_returns_none_and_logs_info(self, caplog):
+        config = {"cov_matrix": None}
         with caplog.at_level(logging.INFO):
-            load_covariance_matrix(config, key_matrix="my_cov")
-        assert any("my_cov" in msg for msg in caplog.messages)
-
-
-# ===========================================================================
-# Loading from a .npy file (key_path branch)
-# ===========================================================================
-
-
-class TestLoadFromNpyFile:
-
-    def test_returns_ndarray(self, tmp_path):
-        npy_file = tmp_path / "cov.npy"
-        np.save(npy_file, REFERENCE_MATRIX)
-        config = {"cov_matrix_path": str(npy_file)}
-        result = load_covariance_matrix(config)
-        assert isinstance(result, np.ndarray)
-
-    def test_values_match(self, tmp_path):
-        npy_file = tmp_path / "cov.npy"
-        np.save(npy_file, REFERENCE_MATRIX)
-        config = {"cov_matrix_path": str(npy_file)}
-        result = load_covariance_matrix(config)
-        np.testing.assert_array_almost_equal(result, REFERENCE_MATRIX)
-
-    def test_custom_key_path(self, tmp_path):
-        npy_file = tmp_path / "cov.npy"
-        np.save(npy_file, REFERENCE_MATRIX)
-        config = {"custom_path_key": str(npy_file)}
-        result = load_covariance_matrix(config, key_path="custom_path_key")
-        np.testing.assert_array_almost_equal(result, REFERENCE_MATRIX)
-
-    def test_logs_info_when_loading_from_npy(self, tmp_path, caplog):
-        npy_file = tmp_path / "cov.npy"
-        np.save(npy_file, REFERENCE_MATRIX)
-        config = {"cov_matrix_path": str(npy_file)}
-        with caplog.at_level(logging.INFO):
-            load_covariance_matrix(config)
-        assert any(str(npy_file) in msg for msg in caplog.messages)
-
-
-# ===========================================================================
-# Loading from a .tsv file (key_path branch)
-# ===========================================================================
-
-
-class TestLoadFromTsvFile:
-
-    def test_returns_dataframe(self, tmp_path):
-        """TSV branch returns a DataFrame (as per the implementation)."""
-        tsv_file = tmp_path / "cov.tsv"
-        pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=True
-        )
-        config = {"cov_matrix_path": str(tsv_file)}
-        result = load_covariance_matrix(config)
-        assert isinstance(result, pd.DataFrame)
-
-    def test_values_match(self, tmp_path):
-        tsv_file = tmp_path / "cov.tsv"
-        pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=True
-        )
-        config = {"cov_matrix_path": str(tsv_file)}
-        result = load_covariance_matrix(config)
-        np.testing.assert_array_almost_equal(result.values, REFERENCE_MATRIX)
-
-    def test_shape_is_correct(self, tmp_path):
-        tsv_file = tmp_path / "cov.tsv"
-        pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=True
-        )
-        config = {"cov_matrix_path": str(tsv_file)}
-        result = load_covariance_matrix(config)
-        assert result.shape == REFERENCE_MATRIX.shape
-
-    def test_logs_info_when_loading_from_tsv(self, tmp_path, caplog):
-        tsv_file = tmp_path / "cov.tsv"
-        pd.DataFrame(REFERENCE_MATRIX).to_csv(
-            tsv_file, sep="\t", index=False, header=True
-        )
-        config = {"cov_matrix_path": str(tsv_file)}
-        with caplog.at_level(logging.INFO):
-            load_covariance_matrix(config)
-        assert any(str(tsv_file) in msg for msg in caplog.messages)
-
-
-# ===========================================================================
-# Loading from a CSV file (key_path branch, default / fallback)
-# ===========================================================================
-
-
-class TestLoadFromCsvFile:
-
-    def test_returns_ndarray(self, tmp_path):
-        csv_file = tmp_path / "cov.csv"
-        np.savetxt(csv_file, REFERENCE_MATRIX, delimiter=",")
-        config = {"cov_matrix_path": str(csv_file)}
-        result = load_covariance_matrix(config)
-        assert isinstance(result, np.ndarray)
-
-    def test_values_match(self, tmp_path):
-        csv_file = tmp_path / "cov.csv"
-        np.savetxt(csv_file, REFERENCE_MATRIX, delimiter=",")
-        config = {"cov_matrix_path": str(csv_file)}
-        result = load_covariance_matrix(config)
-        np.testing.assert_array_almost_equal(result, REFERENCE_MATRIX)
-
-    def test_shape_is_correct(self, tmp_path):
-        csv_file = tmp_path / "cov.csv"
-        np.savetxt(csv_file, REFERENCE_MATRIX, delimiter=",")
-        config = {"cov_matrix_path": str(csv_file)}
-        result = load_covariance_matrix(config)
-        assert result.shape == REFERENCE_MATRIX.shape
-
-    def test_unknown_extension_treated_as_csv(self, tmp_path):
-        """An unrecognised extension should fall through to the CSV loader."""
-        txt_file = tmp_path / "cov.dat"
-        np.savetxt(txt_file, REFERENCE_MATRIX, delimiter=",")
-        config = {"cov_matrix_path": str(txt_file)}
-        result = load_covariance_matrix(config)
-        np.testing.assert_array_almost_equal(result, REFERENCE_MATRIX)
-
-    def test_logs_info_when_loading_from_csv(self, tmp_path, caplog):
-        csv_file = tmp_path / "cov.csv"
-        np.savetxt(csv_file, REFERENCE_MATRIX, delimiter=",")
-        config = {"cov_matrix_path": str(csv_file)}
-        with caplog.at_level(logging.INFO):
-            load_covariance_matrix(config)
-        assert any(str(csv_file) in msg for msg in caplog.messages)
-
-
-# ===========================================================================
-# Returns None + warning when neither key is found
-# ===========================================================================
-
-
-class TestReturnsNoneWhenKeysMissing:
-
-    def test_returns_none_for_empty_config(self):
-        result = load_covariance_matrix({})
+            result = load_covariance_matrix(config)
         assert result is None
-
-    def test_returns_none_when_key_matrix_is_none_and_no_path(self):
-        result = load_covariance_matrix({}, key_matrix=None)
-        assert result is None
-
-    def test_returns_none_when_unrelated_keys_in_config(self):
-        config = {"something_else": "value", "another_key": 42}
-        result = load_covariance_matrix(config, key_matrix="my_cov")
-        assert result is None
-
-    def test_logs_warning_when_neither_key_found(self, caplog):
-        config = {}
-        with caplog.at_level(logging.WARNING):
-            load_covariance_matrix(config, key_matrix="my_cov")
         assert any(
-            "my_cov" in msg or "cov_matrix_path" in msg for msg in caplog.messages
+            "No covariance matrix" in msg or "is None" in msg for msg in caplog.messages
         )
 
-    def test_warning_mentions_both_missing_keys(self, caplog):
-        config = {}
-        with caplog.at_level(logging.WARNING):
-            load_covariance_matrix(config, key_matrix="my_cov", key_path="my_path")
-        warning_text = " ".join(caplog.messages)
-        assert "my_cov" in warning_text or "my_path" in warning_text
 
-    def test_returns_none_when_key_path_value_is_falsy(self, tmp_path):
-        """key_path key present but value is empty string — should return None."""
-        config = {"cov_matrix_path": ""}
+class TestLoadFromArrayLike:
+
+    def test_list_returns_ndarray(self):
+        config = {"cov_matrix": REFERENCE_MATRIX.tolist()}
         result = load_covariance_matrix(config)
-        assert result is None
+        assert isinstance(result, np.ndarray)
 
-
-# ===========================================================================
-# Edge cases
-# ===========================================================================
-
-
-class TestEdgeCases:
-
-    def test_1x1_matrix_from_npy(self, tmp_path):
-        mat = np.array([[3.14]])
-        npy_file = tmp_path / "tiny.npy"
-        np.save(npy_file, mat)
-        config = {"cov_matrix_path": str(npy_file)}
+    def test_list_values_match(self):
+        config = {"cov_matrix": REFERENCE_MATRIX.tolist()}
         result = load_covariance_matrix(config)
-        np.testing.assert_array_almost_equal(result, mat)
+        np.testing.assert_allclose(result, REFERENCE_MATRIX)
 
-    def test_large_matrix_from_csv(self, tmp_path):
-        rng = np.random.default_rng(0)
-        A = rng.standard_normal((50, 50))
-        mat = A @ A.T  # SPD matrix
-        csv_file = tmp_path / "large.csv"
-        np.savetxt(csv_file, mat, delimiter=",")
-        config = {"cov_matrix_path": str(csv_file)}
+    def test_ndarray_values_match(self):
+        config = {"cov_matrix": REFERENCE_MATRIX}
         result = load_covariance_matrix(config)
-        np.testing.assert_array_almost_equal(result, mat)
+        np.testing.assert_allclose(result, REFERENCE_MATRIX)
 
-    def test_key_matrix_none_does_not_match_config_key_none(self):
-        """key_matrix=None must NOT accidentally match a config key of None."""
-        # dict lookup `None in config` where config has only string keys → False
-        config = {"cov_matrix_path": None}
-        result = load_covariance_matrix(config, key_matrix=None)
-        assert result is None
+    def test_logs_info_when_loading_from_arraylike(self, caplog):
+        config = {"cov_matrix": REFERENCE_MATRIX.tolist()}
+        with caplog.at_level(logging.INFO):
+            load_covariance_matrix(config)
+        assert any("config value" in msg for msg in caplog.messages)
 
-    @pytest.mark.parametrize(
-        "ext,save_fn",
-        [
-            ("npy", lambda p, m: np.save(p, m)),
-            ("csv", lambda p, m: np.savetxt(p, m, delimiter=",")),
-        ],
-    )
-    def test_parametrized_file_formats(self, tmp_path, ext, save_fn):
-        mat = np.eye(4) * 7.0
-        file_path = tmp_path / f"cov.{ext}"
-        save_fn(file_path, mat)
-        config = {"cov_matrix_path": str(file_path)}
+
+class TestLoadFromPaths:
+
+    def test_path_not_found_raises_valueerror(self, tmp_path):
+        config = {"cov_matrix": str(tmp_path / "nope.npy")}
+        with pytest.raises(ValueError, match="file not found"):
+            load_covariance_matrix(config)
+
+    def test_loads_from_npy(self, tmp_path):
+        p = tmp_path / "cov.npy"
+        np.save(p, REFERENCE_MATRIX)
+
+        config = {"cov_matrix": str(p)}
         result = load_covariance_matrix(config)
-        np.testing.assert_array_almost_equal(np.asarray(result), mat)
+
+        assert isinstance(result, np.ndarray)
+        np.testing.assert_allclose(result, REFERENCE_MATRIX)
+
+    def test_loads_from_npy_path_object(self, tmp_path):
+        p = tmp_path / "cov.npy"
+        np.save(p, REFERENCE_MATRIX)
+
+        config = {"cov_matrix": p}  # Path object
+        result = load_covariance_matrix(config)
+
+        np.testing.assert_allclose(result, REFERENCE_MATRIX)
+
+    def test_loads_from_tsv(self, tmp_path):
+        p = tmp_path / "cov.tsv"
+        pd.DataFrame(REFERENCE_MATRIX).to_csv(p, sep="\t", index=False)
+
+        config = {"cov_matrix": str(p)}
+        result = load_covariance_matrix(config)
+
+        assert isinstance(result, np.ndarray)
+        np.testing.assert_allclose(result, REFERENCE_MATRIX)
+
+    def test_unknown_suffix_treated_as_csv_loadtxt(self, tmp_path):
+        p = tmp_path / "cov.dat"
+        np.savetxt(p, REFERENCE_MATRIX, delimiter=",")
+
+        config = {"cov_matrix": str(p)}
+        result = load_covariance_matrix(config)
+
+        assert isinstance(result, np.ndarray)
+        np.testing.assert_allclose(result, REFERENCE_MATRIX)
+
+    def test_logs_info_when_loading_from_file(self, tmp_path, caplog):
+        p = tmp_path / "cov.npy"
+        np.save(p, REFERENCE_MATRIX)
+        config = {"cov_matrix": str(p)}
+
+        with caplog.at_level(logging.INFO):
+            load_covariance_matrix(config)
+
+        assert any(str(p) in msg for msg in caplog.messages)
+
+
+class TestInvalidTypes:
+
+    @pytest.mark.parametrize("bad", [123, 12.3, object(), {"a": 1}])
+    def test_invalid_type_raises_valueerror(self, bad):
+        config = {"cov_matrix": bad}
+        with pytest.raises(ValueError, match="Unsupported type"):
+            load_covariance_matrix(config)
