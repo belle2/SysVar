@@ -970,6 +970,7 @@ class TestCorrectionBF_Uncertainties:
             if correlation != "fully_correlated_in_parts":
                 corr = CorrectionBF(systematic="x", MC_production="y")
                 uncertainty = corr.uncertainties.get("BF_unc")
+                assert "BF_unc" in corr.uncertainties
             else:
                 with pytest.raises(NotImplementedError):
                     uncertainty = FullyCorrelatedUncertaintyInParts(
