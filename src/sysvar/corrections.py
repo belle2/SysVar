@@ -4,8 +4,9 @@ from functools import cached_property
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, InitVar
-from typing import List, Iterable, Optional
+from typing import List, Iterable, Optional, Any
 from os import path
+from pathlib import Path
 import matplotlib.pyplot as plt
 
 from particle import Particle
@@ -50,10 +51,16 @@ class UnkownUncertaintyType(Exception):
 class NotValidRateType(Exception):
     pass
 
+
 class InvalidCorrectionTableKey(Exception):
     pass
 
+
 class CorrectionTablehasNaNValues(Exception):
+    pass
+
+
+class InvalidInfoDict(Exception):
     pass
 
 
@@ -125,6 +132,73 @@ class BaseCorrection(ABC, SavableAttributesObject):
             return self.uncertainties[list(self.uncertainties.keys())[0]].errors
         else:
             raise ValueError("No uncertainties have been added to the correction")
+
+    def _is_valid_info_dict(self) -> None:
+        self._require_key("cov_matrix")
+        self._validate_cov_matrix_value(self.info["cov_matrix"])
+
+    # ----------------------------
+    # Helpers (instance methods)
+    # ----------------------------
+
+    def _require_key(self, key: str) -> None:
+        if key not in self.info:
+            raise InvalidInfoDict(f"The info dictionary must contain a '{key}' key")
+
+    def _validate_cov_matrix_value(self, cov: Any) -> None:
+        """Validate cov_matrix value: None OR path OR array-like."""
+        if cov is None:
+            return
+
+        if isinstance(cov, (str, Path)):
+            self._validate_cov_matrix_path(cov)
+            return
+
+        if isinstance(cov, (list, tuple, np.ndarray)):
+            self._validate_cov_matrix_arraylike(cov)
+            return
+
+        raise InvalidInfoDict(
+            f"'cov_matrix' must be None, a path (str/Path), or an array-like "
+            f"(list/tuple/np.ndarray). Got: {type(cov)}"
+        )
+
+    def _validate_cov_matrix_path(self, path_value: str | Path) -> None:
+        p = Path(path_value)
+
+        if not p.exists():
+            raise InvalidInfoDict(f"'cov_matrix' path does not exist: {p}")
+
+        allowed_suffixes = {
+            ".npy",
+            ".tsv",
+        }
+        if p.suffix not in allowed_suffixes:
+            raise InvalidInfoDict(
+                f"Unsupported cov_matrix file type '{p.suffix}'. "
+                f"Supported: {', '.join(sorted(allowed_suffixes))}"
+            )
+
+    def _validate_cov_matrix_arraylike(self, cov: Any) -> None:
+        arr = np.asarray(cov, dtype=float)
+
+        if arr.ndim != 2:
+            raise InvalidInfoDict("'cov_matrix' must be a 2D array-like (NxN).")
+
+        n, m = arr.shape
+        if n == 0 or m == 0:
+            raise InvalidInfoDict("'cov_matrix' cannot be empty.")
+        if n != m:
+            raise InvalidInfoDict(
+                f"'cov_matrix' must be square (NxN). Got shape {arr.shape}."
+            )
+
+        if not np.isfinite(arr).all():
+            raise InvalidInfoDict("'cov_matrix' contains NaN or inf values.")
+
+        # Optional but recommended
+        if not np.allclose(arr, arr.T, rtol=0, atol=1e-12):
+            raise InvalidInfoDict("'cov_matrix' must be symmetric.")
 
     def add_uncertainty(
         self,
@@ -244,6 +318,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
             raise MissingInformationError(
                 f"Need to specify the systematic effect and the MC production in the positional arguments. You passed {self.systematic} and {self.MC_production}"
             )
+        self._is_valid_info_dict()
 
         self.visualizer = None
         self.title = self.info["title"]
@@ -386,29 +461,34 @@ class BaseCorrectionFromCSV(BaseCorrection):
                 "csv_path must be provided when using BaseCorrectionFromCSV."
             )
 
-        #loading all columns for the csv file to enforce string dtype on unit columns
+        # loading all columns for the csv file to enforce string dtype on unit columns
         cols = pd.read_csv(self.csv_path, nrows=0).columns
 
         # Enforce string dtype on unit columns
         unit_converters = {col: str for col in cols if "unit" in col.lower()}
 
-        self.table = read_csv(self.csv_path, converters=unit_converters, na_filter=True) 
+        self.table = read_csv(self.csv_path, converters=unit_converters, na_filter=True)
 
         self._is_valid_table()
 
         # Handle explicit covariance matrix
         if self.cov_matrix_path is not None:
             if not path.exists(self.cov_matrix_path):
-                raise ValueError(f"Covariance matrix file not found: {self.cov_matrix_path}")
+                raise ValueError(
+                    f"Covariance matrix file not found: {self.cov_matrix_path}"
+                )
             # Create a minimal info dict for load_covariance_matrix
-            cov_info = {"cov_matrix_path": self.cov_matrix_path}
+            cov_info = {"cov_matrix": self.cov_matrix_path}
             self.cov_matrix = load_covariance_matrix(cov_info)
 
         else:
             self.cov_matrix = None
 
-        self.info = self._build_info_from_table()            
-        self.title = self.title if isinstance(self.title, str) else path.basename(self.csv_path)
+        self.info = self._build_info_from_table()
+        self._is_valid_info_dict()
+        self.title = (
+            self.title if isinstance(self.title, str) else path.basename(self.csv_path)
+        )
         self.visualizer = None
 
     def _is_valid_table(self) -> None:
@@ -420,7 +500,11 @@ class BaseCorrectionFromCSV(BaseCorrection):
         for pdg_column in ["PDG", "mcPDG"]:
             if pdg_column in self.table.columns:
                 for row_index, pdg_value in enumerate(self.table[pdg_column].tolist()):
-                    if isinstance(pdg_value, str) and pdg_value.startswith("[") and pdg_value.endswith("]"):
+                    if (
+                        isinstance(pdg_value, str)
+                        and pdg_value.startswith("[")
+                        and pdg_value.endswith("]")
+                    ):
                         pdg_list_text = pdg_value.strip("[]").strip()
                         if pdg_list_text == "":
                             continue
@@ -441,27 +525,31 @@ class BaseCorrectionFromCSV(BaseCorrection):
         """
         Build a lightweight info dictionary compatible with BaseCorrection.populate_uncertainties.
         """
-
-        uncertainties: dict = {
-            "fully_correlated": {},
-            "uncorrelated": {},
-        }
-
-        extra_cuts_columns = [col for col in self.table.columns if col in ["PDG", "mcPDG"] and self.table[col].notna().any()]
+        extra_cuts_columns = [
+            col
+            for col in self.table.columns
+            if col in ["PDG", "mcPDG"] and self.table[col].notna().any()
+        ]
 
         # If explicit covariance matrix is provided, skip individual uncertainty columns
         if self.cov_matrix is not None:
             info = {
                 "uncertainties": {},
                 "extra_cuts_columns": extra_cuts_columns,
-                "covariance_matrix": {"cov_matrix_path": self.cov_matrix_path},
+                "cov_matrix": self.cov_matrix_path,
             }
             return info
 
+        uncertainties: dict = {
+            "fully_correlated": {},
+            "uncorrelated": {},
+        }
         for key in ["stat_corr", "sys_corr", "stat_uncorr", "sys_uncorr"]:
             if key not in self.table:
-                raise InvalidCorrectionTableKey(f"Missing key in correction table: {key}")
-            
+                raise InvalidCorrectionTableKey(
+                    f"Missing key in correction table: {key}"
+                )
+
             values = self.table[key].tolist()
 
             if not any(np.isnan(values)) and not any(np.isinf(values)):
@@ -475,16 +563,17 @@ class BaseCorrectionFromCSV(BaseCorrection):
         info = {
             "uncertainties": uncertainties,
             "extra_cuts_columns": extra_cuts_columns,
+            "cov_matrix": None,
         }
         return info
 
     def add_extra_cuts(self, queries: list, prefix: str | None) -> list:
 
         pdg_columns = ["PDG", "mcPDG"]
-        
+
         for row_index, base_query in enumerate(queries):
             extra_conditions = []
-            
+
             for pdg_column in pdg_columns:
                 if pdg_column in self.table.columns:
                     pdg_value = self.table[pdg_column].iloc[row_index]
@@ -497,18 +586,18 @@ class BaseCorrectionFromCSV(BaseCorrection):
                         continue
 
                     pdg_list = [int(x.strip()) for x in pdg_list_text.split(",")]
-                    
+
                     column_name = self._build_column_name(prefix, pdg_column)
-                    
+
                     if len(pdg_list) == 1:
                         extra_conditions.append(f"{column_name} == {pdg_list[0]}")
                     else:
                         extra_conditions.append(f"{column_name} in {pdg_list}")
-            
+
             if extra_conditions:
                 modified_query = f"({base_query}) & ({' & '.join(extra_conditions)})"
                 queries[row_index] = modified_query
-        
+
         return queries
 
 
@@ -624,7 +713,7 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
         # If both min and max columns are present, use bin edges. Otherwise, look for discrete values which builds queries using equality.
         min_col = f"{self.dependant_variable}_min"
         max_col = f"{self.dependant_variable}_max"
-        
+
         if min_col in self.table and max_col in self.table:
             self.use_equality_queries = False
             self.lower_bounds = self.table[min_col].tolist()
@@ -645,14 +734,18 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
     def _is_valid_1D_table(self) -> None:
 
         if "dependant_variable" in self.table:
-            self.dependant_variable = str(self.table["dependant_variable"].iloc[0]).strip()
+            self.dependant_variable = str(
+                self.table["dependant_variable"].iloc[0]
+            ).strip()
         elif "dependant_variable_1" in self.table:
-            self.dependant_variable = str(self.table["dependant_variable_1"].iloc[0]).strip()
+            self.dependant_variable = str(
+                self.table["dependant_variable_1"].iloc[0]
+            ).strip()
         else:
             raise ValueError(
                 "CSV must contain 'dependant_variable' or 'dependant_variable_1' column."
             )
-        
+
     def get_unit(self) -> str:
         """Return the unit associated with the dependent variable.
 
@@ -670,7 +763,9 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
             str: The unit string if found; otherwise an empty string.
         """
         unit_col_candidates = [f"{self.dependant_variable}_unit", "unit"]
-        unit_col = next((c for c in unit_col_candidates if c in self.table.columns), None)
+        unit_col = next(
+            (c for c in unit_col_candidates if c in self.table.columns), None
+        )
         if unit_col is None:
             unit_cols = [c for c in self.table.columns if c.endswith("_unit")]
             unit_col = unit_cols[0] if len(unit_cols) > 0 else None
@@ -679,7 +774,7 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
             return self.table[unit_col].iloc[0]
         else:
             return ""
-    
+
     @property
     def value_edges(self) -> np.ndarray:
         if self.use_equality_queries:
@@ -699,14 +794,16 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
     @property
     def visual_labels(self) -> List[str]:
         label_col_candidates = [f"{self.dependant_variable}_label", "label"]
-        label_col = next((c for c in label_col_candidates if c in self.table.columns), None)
+        label_col = next(
+            (c for c in label_col_candidates if c in self.table.columns), None
+        )
         if label_col is None:
             label_cols = [c for c in self.table.columns if c.endswith("_label")]
             label_col = label_cols[0] if len(label_cols) > 0 else None
-        
+
         if label_col is not None:
             return self.table[label_col].tolist()
-        
+
         if self.use_equality_queries:
             return [
                 f"{self.dependant_variable} = {val} {self.unit}"
@@ -720,7 +817,7 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
 
     def build_queries(self, prefix: str | None = None) -> list:
         column_name = self._build_column_name(prefix, self.dependant_variable)
-        
+
         if self.use_equality_queries:
             queries = [f"{column_name} == {val}" for val in self.variable_values]
         else:
@@ -728,7 +825,7 @@ class Correction1DFromCSV(BaseCorrectionFromCSV):
                 f"{low} <= {column_name} < {up}"
                 for low, up in zip(self.lower_bounds, self.upper_bounds)
             ]
-        
+
         return self.add_extra_cuts(queries, prefix)
 
 
@@ -866,8 +963,12 @@ class Correction2DFromCSV(BaseCorrectionFromCSV):
 
         self._is_valid_2D_table()
 
-        self.dependant_variable_1 = str(self.table["dependant_variable_1"].iloc[0]).strip()
-        self.dependant_variable_2 = str(self.table["dependant_variable_2"].iloc[0]).strip()
+        self.dependant_variable_1 = str(
+            self.table["dependant_variable_1"].iloc[0]
+        ).strip()
+        self.dependant_variable_2 = str(
+            self.table["dependant_variable_2"].iloc[0]
+        ).strip()
 
         # Units
         unit1_col = f"{self.dependant_variable_1}_unit"
@@ -890,7 +991,10 @@ class Correction2DFromCSV(BaseCorrectionFromCSV):
 
     def _is_valid_2D_table(self) -> None:
 
-        if "dependant_variable_1" not in self.table or "dependant_variable_2" not in self.table:
+        if (
+            "dependant_variable_1" not in self.table
+            or "dependant_variable_2" not in self.table
+        ):
             raise ValueError(
                 "CSV must contain 'dependant_variable_1' and 'dependant_variable_2' column."
             )
@@ -923,7 +1027,8 @@ class Correction2DFromCSV(BaseCorrectionFromCSV):
             for (v1min, v1max, v2min, v2max) in self.iterator
         ]
         return self.add_extra_cuts(queries, prefix)
-    
+
+
 @dataclass
 class Correction3DFromCSV(BaseCorrectionFromCSV):
     """
@@ -948,9 +1053,15 @@ class Correction3DFromCSV(BaseCorrectionFromCSV):
 
         self._is_valid_3D_table()
 
-        self.dependant_variable_1 = str(self.table["dependant_variable_1"].iloc[0]).strip()
-        self.dependant_variable_2 = str(self.table["dependant_variable_2"].iloc[0]).strip()
-        self.dependant_variable_3 = str(self.table["dependant_variable_3"].iloc[0]).strip()
+        self.dependant_variable_1 = str(
+            self.table["dependant_variable_1"].iloc[0]
+        ).strip()
+        self.dependant_variable_2 = str(
+            self.table["dependant_variable_2"].iloc[0]
+        ).strip()
+        self.dependant_variable_3 = str(
+            self.table["dependant_variable_3"].iloc[0]
+        ).strip()
 
         # Units
         unit1_col = f"{self.dependant_variable_1}_unit"
@@ -967,17 +1078,28 @@ class Correction3DFromCSV(BaseCorrectionFromCSV):
         self._v2_max = f"{self.dependant_variable_2}_max"
         self._v3_min = f"{self.dependant_variable_3}_min"
         self._v3_max = f"{self.dependant_variable_3}_max"
-        for c in (self._v1_min, self._v1_max, self._v2_min, self._v2_max, self._v3_min, self._v3_max):
+        for c in (
+            self._v1_min,
+            self._v1_max,
+            self._v2_min,
+            self._v2_max,
+            self._v3_min,
+            self._v3_max,
+        ):
             if c not in self.table.columns:
                 raise ValueError(f"CSV must contain '{c}' column for 2D bin edges.")
 
         self.central_values = self.table["central_value"].tolist()
 
         self.populate_uncertainties()
-    
+
     def _is_valid_3D_table(self) -> None:
 
-        if "dependant_variable_1" not in self.table or "dependant_variable_2" not in self.table or "dependant_variable_3" not in self.table:
+        if (
+            "dependant_variable_1" not in self.table
+            or "dependant_variable_2" not in self.table
+            or "dependant_variable_3" not in self.table
+        ):
             raise ValueError(
                 "CSV must contain 'dependant_variable_1', 'dependant_variable_2' and 'dependant_variable_3' column."
             )
@@ -1189,6 +1311,7 @@ class CustomCorrection(BaseCorrection):
 
     def __post_init__(self, info):
         self.info = info
+        self._is_valid_info_dict()
 
         self.dependant_variable = self.info["dependant_variable"]
         self.central_values = self.info["central_values"]
@@ -1418,7 +1541,11 @@ class CorrectionPID(BaseCorrectionFromYaml):
 
 
 def create_correction_object(
-    syst_effect: str | dict | None, MC_prod: str | None = None, csv_path: str | None = None,  title: str | None = None, cov_matrix_path: str | None = None
+    syst_effect: str | dict | None,
+    MC_prod: str | None = None,
+    csv_path: str | None = None,
+    title: str | None = None,
+    cov_matrix_path: str | None = None,
 ) -> BaseCorrection:
     """Retrieves and creates the appropriate correction object based on the systematic effect and MC production type.
 
@@ -1457,7 +1584,7 @@ def create_correction_object(
         "BF": CorrectionBF,
         "PID": CorrectionPID,
     }
-    
+
     csv_correction_types = {
         "1D": Correction1DFromCSV,
         "2D": Correction2DFromCSV,
@@ -1468,34 +1595,48 @@ def create_correction_object(
     if csv_path is not None:
         if not path.exists(csv_path):
             raise ValueError(f"CSV file not found: {csv_path}")
-        
+
         # Determine correction type from CSV structure
         try:
             test_table = read_csv(csv_path)
-            if "dependant_variable_1" in test_table.columns and "dependant_variable_2" in test_table.columns and "dependant_variable_3" in test_table.columns:
+            if (
+                "dependant_variable_1" in test_table.columns
+                and "dependant_variable_2" in test_table.columns
+                and "dependant_variable_3" in test_table.columns
+            ):
                 csv_type = "3D"
-            elif "dependant_variable_1" in test_table.columns and "dependant_variable_2" in test_table.columns:
+            elif (
+                "dependant_variable_1" in test_table.columns
+                and "dependant_variable_2" in test_table.columns
+            ):
                 csv_type = "2D"
-            elif "dependant_variable" in test_table.columns or "dependant_variable_1" in test_table.columns:
+            elif (
+                "dependant_variable" in test_table.columns
+                or "dependant_variable_1" in test_table.columns
+            ):
                 csv_type = "1D"
             else:
-                raise ValueError("Cannot determine CSV correction type from columns. Please specify csv_type.")
+                raise ValueError(
+                    "Cannot determine CSV correction type from columns. Please specify csv_type."
+                )
         except Exception as e:
             raise ValueError(f"Error reading CSV file {csv_path}: {e}")
-        
+
         if csv_type not in csv_correction_types:
             raise NotImplementedError(
                 f"Available CSV correction types are: {list(csv_correction_types.keys())} but you passed {csv_type}"
             )
-        
-        return csv_correction_types[csv_type](csv_path=csv_path, title=title, cov_matrix_path=cov_matrix_path)
+
+        return csv_correction_types[csv_type](
+            csv_path=csv_path, title=title, cov_matrix_path=cov_matrix_path
+        )
 
     # Handle YAML-based corrections
     elif isinstance(syst_effect, str):
         MC_prod = MC_prod if MC_prod is not None else ""
         if MC_prod == "":
             raise ValueError("MC_prod is required for YAML-based corrections")
-            
+
         corr_type = read_yaml(syst_effect, MC_prod)["correction_type"]
 
         try:
@@ -1506,7 +1647,7 @@ def create_correction_object(
             raise NotImplementedError(
                 f"Available corrections are: {list(correction_types.keys())} but you passed {corr_type}"
             )
-    
+
     # Handle custom corrections
     elif isinstance(syst_effect, dict):
         return CustomCorrection(info=syst_effect)

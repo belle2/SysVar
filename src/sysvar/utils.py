@@ -152,46 +152,48 @@ class SavableAttributesObject:
         self.saving_info = saving_info
 
 
-def load_covariance_matrix(
-    config: dict,
-    key_matrix: Optional[str] = None,
-    key_path: str = "cov_matrix_path",
-) -> Optional[np.ndarray]:
-    """Load a covariance matrix from a configuration dictionary.
-
-    This function attempts to load a covariance matrix either directly from the
-    configuration using a specified key or from a file path (supporting `.npy` or CSV files).
-
-    Args:
-        config (dict): Configuration dictionary that may contain the covariance matrix
-            or a path to the matrix file.
-        key_matrix (Optional[str], optional): Key in the config dictionary where the
-            matrix might be directly stored. Defaults to None.
-        key_path (str, optional): Key in the config dictionary where the file path to the
-            covariance matrix is specified. Defaults to "cov_matrix_path".
-
-    Returns:
-        Optional[np.ndarray]: The loaded covariance matrix as a NumPy array if found,
-        otherwise None.
+def load_covariance_matrix(config: dict, *, key: str = "cov_matrix") -> np.ndarray:
     """
-    if key_matrix in config:
-        logging.info(f"Loading covariance matrix from config key: {key_matrix}")
-        return np.asarray(config[key_matrix])
+    Load a covariance matrix from a config dict.
 
-    elif key_path in config:
-        path = config.get(key_path)
-        logging.info(f"Loading covariance matrix from file specified in config: {path}")
-        if path:
-            if path.endswith(".npy"):
-                return np.load(path)
-            elif path.endswith(".tsv"):
-                return pd.read_csv(path, sep="\t")
-            else:
-                # assume CSV
-                return np.loadtxt(path, delimiter=",")
-    else:
-        logging.warning(
-            f"Explicit covariance matrix was not found in config under {key_matrix} or {key_path} and will be built from the specified uncertainties."
-        )
+    Contract:
+      - config MUST contain `key` (default: 'cov_matrix')
+      - If config[key] is None: raise ValueError
+      - If config[key] is a path (str/Path): load from file
+      - If config[key] is array-like (list/tuple/np.ndarray): return np.ndarray
+    """
+    if key not in config:
+        raise KeyError(f"Config must contain '{key}' key")
 
-    return None
+    cov = config[key]
+
+    if cov is None:
+        logging.info(f"'{key}' is None in config. No covariance matrix will be loaded.")
+        return None
+
+    # Path-like: load from file
+    if isinstance(cov, (str, Path)):
+        p = Path(cov)
+        if not p.exists():
+            raise ValueError(f"Covariance matrix file not found: {p}")
+
+        logging.info(f"Loading covariance matrix from file: {p}")
+
+        if p.suffix == ".npy":
+            return np.load(p)
+        if p.suffix == ".tsv":
+            # return numpy array for consistency
+            return pd.read_csv(p, sep="\t").to_numpy()
+
+        # otherwise assume CSV-like numeric text
+        return np.loadtxt(p, delimiter=",")
+
+    # Array-like: use directly
+    if isinstance(cov, (list, tuple, np.ndarray)):
+        logging.info(f"Loading covariance matrix from config value '{key}'")
+        return np.asarray(cov, dtype=float)
+
+    raise ValueError(
+        f"Unsupported type for '{key}': {type(cov)}. "
+        "Expected None, path (str/Path), or array-like (list/tuple/np.ndarray)."
+    )

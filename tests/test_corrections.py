@@ -38,6 +38,7 @@ from sysvar.corrections import (
     UncertaintyWithSameNameExists,
     CorrectionBF,
     CustomCorrection,
+    InvalidInfoDict,
 )
 from sysvar.uncertainties import FullyCorrelatedUncertaintyInParts
 
@@ -779,6 +780,7 @@ def _make_bf_info(
         "correlation": correlation,
         "extra_cuts": extra_cuts,
         "dependant_variable": "dmID",
+        "cov_matrix": None,
     }
 
 
@@ -804,9 +806,10 @@ def _make_custom_info(
                 "stat": [0.01] * n,
             },
         },
+        "cov_matrix": None,
     }
     if cov_matrix is not None:
-        info["my_cov"] = cov_matrix
+        info["cov_matrix"] = cov_matrix
     return info
 
 
@@ -1080,7 +1083,7 @@ def corr_custom(custom_info):
 def corr_custom_with_cov():
     cov = np.diag([0.02**2, 0.03**2, 0.025**2]).tolist()
     info = _make_custom_info(cov_matrix=cov)
-    info["my_cov"] = cov
+    info["cov_matrix"] = cov
     # load_covariance_matrix reads key_matrix; give it the right key
     return CustomCorrection(info=info)
 
@@ -1233,14 +1236,14 @@ class TestCustomCorrection_Uncertainties:
     def test_explicit_cov_uncertainty_added(self):
         cov = np.diag([0.02**2, 0.03**2, 0.025**2])
         info = _make_custom_info()
-        info["my_cov"] = cov.tolist()
+        info["cov_matrix"] = cov.tolist()
         corr = CustomCorrection(info=info)
         assert "explicit_covariance" in corr.uncertainties
 
     def test_explicit_cov_total_error_matches_diagonal(self):
         cov = np.diag([0.02**2, 0.03**2, 0.025**2])
         info = _make_custom_info()
-        info["my_cov"] = cov.tolist()
+        info["cov_matrix"] = cov.tolist()
         corr = CustomCorrection(info=info)
         expected = np.sqrt(np.diag(cov))
         np.testing.assert_allclose(corr.total_error, expected, rtol=1e-6)
@@ -1289,6 +1292,7 @@ class TestCustomCorrection_EdgeCases:
             "uncertainties": {
                 "uncorrelated": {"stat": [0.01] * n},
             },
+            "cov_matrix": None,
         }
         corr = CustomCorrection(info=info)
         assert corr.N == n
@@ -1302,3 +1306,86 @@ class TestCustomCorrection_EdgeCases:
         info["unit"] = ""
         corr = CustomCorrection(info=info)
         assert corr.unit == ""
+
+
+# ===========================================================================
+# CustomCorrection – cov_matrix validation
+# ===========================================================================
+
+
+class TestCustomCorrection_CovMatrixValidation:
+
+    def test_cov_matrix_none_is_allowed(self):
+        info = _make_custom_info()
+        info["cov_matrix"] = None
+        _ = CustomCorrection(info=info)  # should not raise
+
+    def test_cov_matrix_invalid_type_raises(self):
+        info = _make_custom_info()
+        info["cov_matrix"] = 123  # invalid type
+        with pytest.raises(InvalidInfoDict):
+            _ = CustomCorrection(info=info)
+
+    def test_cov_matrix_path_not_found_raises(self, tmp_path):
+        info = _make_custom_info()
+        info["cov_matrix"] = str(tmp_path / "does_not_exist.npy")
+        with pytest.raises(InvalidInfoDict, match="does not exist|not exist"):
+            _ = CustomCorrection(info=info)
+
+    def test_cov_matrix_path_bad_suffix_raises(self, tmp_path):
+        p = tmp_path / "cov.badext"
+        p.write_text("dummy")
+        info = _make_custom_info()
+        info["cov_matrix"] = str(p)
+        with pytest.raises(InvalidInfoDict, match="Unsupported|file type|suffix"):
+            _ = CustomCorrection(info=info)
+
+    @pytest.mark.parametrize("suffix", [".npy", ".tsv"])
+    def test_cov_matrix_path_valid_suffix_loads_and_adds_explicit_uncertainty(
+        self, tmp_path, suffix
+    ):
+        cov = np.diag([0.02**2, 0.03**2, 0.025**2])  # 3x3 to match default n=3
+
+        p = tmp_path / f"cov{suffix}"
+        if suffix == ".npy":
+            np.save(p, cov)
+        else:  # .tsv
+            pd.DataFrame(cov).to_csv(p, sep="\t", index=False)
+
+        info = _make_custom_info(n=3)
+        info["cov_matrix"] = str(p)
+
+        corr = CustomCorrection(info=info)
+
+        assert "explicit_covariance" in corr.uncertainties
+        np.testing.assert_allclose(corr.total_error, np.sqrt(np.diag(cov)), rtol=1e-6)
+
+    def test_cov_matrix_arraylike_not_2d_raises(self):
+        info = _make_custom_info()
+        info["cov_matrix"] = [1.0, 2.0, 3.0]  # 1D
+        with pytest.raises(InvalidInfoDict, match="2D|2d"):
+            _ = CustomCorrection(info=info)
+
+    def test_cov_matrix_arraylike_not_square_raises(self):
+        info = _make_custom_info()
+        info["cov_matrix"] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]  # 2x3
+        with pytest.raises(InvalidInfoDict, match="square|NxN"):
+            _ = CustomCorrection(info=info)
+
+    @pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+    def test_cov_matrix_arraylike_non_finite_raises(self, bad):
+        info = _make_custom_info()
+        info["cov_matrix"] = [[1.0, 0.0], [0.0, bad]]
+        with pytest.raises(InvalidInfoDict, match="NaN|inf|invalid|finite"):
+            _ = CustomCorrection(info=info)
+
+    def test_cov_matrix_arraylike_non_symmetric_raises(self):
+        info = _make_custom_info()
+        info["cov_matrix"] = [[1.0, 0.2], [0.1, 2.0]]  # not symmetric
+        with pytest.raises(InvalidInfoDict, match="symmetric"):
+            _ = CustomCorrection(info=info)
+
+    def test_cov_matrix_arraylike_valid_is_allowed(self):
+        info = _make_custom_info(n=2)
+        info["cov_matrix"] = [[1.0, 0.1], [0.1, 2.0]]
+        _ = CustomCorrection(info=info)  # should not raise
