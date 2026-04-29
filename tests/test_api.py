@@ -59,6 +59,7 @@ def test_eigendecompose_signature_is_stable():
         "df",
         "settings",
         "systematic_source",
+        "title",
         "cov_matrix_path",
         "criterion",
         "prc",
@@ -69,6 +70,7 @@ def test_eigendecompose_signature_is_stable():
         "seed",
     ]
     p = sig.parameters
+    assert p["title"].default is None
     assert p["cov_matrix_path"].default is None
     assert p["criterion"].default == "max_differences"
     assert p["prc"].default == 1e-4
