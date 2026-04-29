@@ -317,7 +317,7 @@ class TestLoadFromPaths:
 
     def test_loads_from_tsv(self, tmp_path):
         p = tmp_path / "cov.tsv"
-        pd.DataFrame(REFERENCE_MATRIX).to_csv(p, sep="\t", index=False)
+        pd.DataFrame(REFERENCE_MATRIX).to_csv(p, sep="\t", index=False, header=False)
 
         config = {"cov_matrix": str(p)}
         result = load_covariance_matrix(config)

@@ -5,7 +5,6 @@ from pathlib import Path
 from yaml import safe_load
 from typing import List, Optional
 import numpy as np
-import pandas as pd
 
 from abc import ABC, abstractmethod
 
@@ -183,7 +182,7 @@ def load_covariance_matrix(config: dict, *, key: str = "cov_matrix") -> np.ndarr
             return np.load(p)
         if p.suffix == ".tsv":
             # return numpy array for consistency
-            return pd.read_csv(p, sep="\t").to_numpy()
+            return np.loadtxt(p, delimiter="\t")
 
         # otherwise assume CSV-like numeric text
         return np.loadtxt(p, delimiter=",")

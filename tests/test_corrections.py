@@ -1350,7 +1350,7 @@ class TestCustomCorrection_CovMatrixValidation:
         if suffix == ".npy":
             np.save(p, cov)
         else:  # .tsv
-            pd.DataFrame(cov).to_csv(p, sep="\t", index=False)
+            pd.DataFrame(cov).to_csv(p, sep="\t", index=False, header=False)
 
         info = _make_custom_info(n=3)
         info["cov_matrix"] = str(p)
