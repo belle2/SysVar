@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Iterable, Optional, Dict, Union
+from typing import List, Iterable, Optional, Dict, Union, Any
 from os import path
 from warnings import warn
 from pathlib import Path
@@ -148,6 +148,7 @@ def eigendecompose(
     df: DataFrame,
     settings: dict[str, Any],
     systematic_source: str | Path | dict,
+    title: str | None = None,
     cov_matrix_path: str | Path | None = None,
     criterion: str = "max_differences",
     prc: float = 1e-4,
@@ -182,6 +183,8 @@ def eigendecompose(
           - `Path` or path-like `str`: a CSV file describing the correction,
           - `dict`: an in-memory correction configuration.
         The exact interpretation is delegated to `EigenDecomposer`.
+    title (str | None, optional): 
+        Custom title for CSV-based corrections. If not provided, will use the CSV filename.
     cov_matrix_path:
         Optional path to an explicit covariance matrix to use instead of building
         it from uncertainties. If provided, it is passed through to
@@ -222,6 +225,7 @@ def eigendecompose(
         df=df,
         settings=settings,
         systematic_source=systematic_source,
+        title=title,
         cov_matrix_path=cov_matrix_path,
         verbose=verbose,
         seed=seed,
