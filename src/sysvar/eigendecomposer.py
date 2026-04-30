@@ -80,7 +80,7 @@ class EigenDecomposer(ChannelTemplateHandler):
                 systematic_source
             )  # Ensure it's a Path object for consistent handling
             # THis will help identify the systematic effect in the settings
-            self._syst_effect = systematic_source.stem
+            self._syst_effect = systematic_source.stem if title is None else title
         # Handle YAML-based corrections
         elif isinstance(systematic_source, str):
             warn(
@@ -89,7 +89,7 @@ class EigenDecomposer(ChannelTemplateHandler):
                 "YAML corrections will remain available only for custom (user-provided) corrections, but future support is not guaranteed.",
                 DeprecationWarning,
             )
-            self._syst_effect = systematic_source
+            self._syst_effect = systematic_source.stem if title is None else title
             MC_production = settings["MC_prod"]
         elif isinstance(systematic_source, dict):
             self._syst_effect = systematic_source["name"]
