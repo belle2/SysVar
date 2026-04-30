@@ -183,8 +183,15 @@ def eigendecompose(
           - `Path` or path-like `str`: a CSV file describing the correction,
           - `dict`: an in-memory correction configuration.
         The exact interpretation is delegated to `EigenDecomposer`.
-    title (str | None, optional): 
-        Custom title for CSV-based corrections. If not provided, will use the CSV filename.
+    title (str | None, optional):
+        Custom identifier for CSV-based corrections.
+
+        If not provided, defaults to the CSV file stem (e.g. "track_eff" for
+        ".../track_eff.csv"). The identifier is used to match this correction to the
+        corresponding systematic configuration in the `settings` dictionary.
+
+            Example:
+                title="track_eff" must match the key/name used in settings["systematics"][...].
     cov_matrix_path:
         Optional path to an explicit covariance matrix to use instead of building
         it from uncertainties. If provided, it is passed through to
