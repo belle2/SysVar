@@ -1,3 +1,4 @@
+from pathlib import Path
 import pytest
 import numpy as np
 import pandas as pd
@@ -5,9 +6,20 @@ from sklearn.preprocessing import MinMaxScaler
 
 from sysvar import add_weights_to_dataframe
 
+def _repo_root_from_test_file() -> Path:
+    # tests/ is at <repo_root>/tests
+    return Path(__file__).resolve().parents[1]
 
-@pytest.fixture
-def toy_df():
+
+def _config_csv_path(csv_filename: str) -> Path:
+    return _repo_root_from_test_file() / "configs" / "csv_configs" / csv_filename
+
+@pytest.fixture(
+    params=[
+        {"csv": "charged_slow_pi_correction.csv", "cov": None},
+    ]
+)
+def toy_df(request):
     rng = np.random.default_rng(8311311)
 
     sample_size = 10
@@ -58,10 +70,14 @@ def toy_df():
     df["template"].replace(1, "signal", inplace=True)
     df["template"].replace(2, "bkg", inplace=True)
 
+    csv_filename = request.param["csv"]
+    csv_path = _config_csv_path(csv_filename)
+
     add_weights_to_dataframe(
         df=df,
-        systematic="charged_slow_pi",
-        MC_production="sysvar_101",
+        #systematic="charged_slow_pi",
+        #MC_production="sysvar_101",
+        csv_path=csv_path,
         prefix="slow_pi",
         weightname="charged_weight",
     )

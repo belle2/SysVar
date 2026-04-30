@@ -199,7 +199,8 @@ class Template(ABC, SavableAttributesObject):
         The method generates column names by combining a fixed set of base columns
         (such as "channel" and "fit_ctgy") with dynamic elements like binning keys,
         system weights, and variables specific to the type of correction applied to
-        the data. The correction could be of type `Correction1D`, `CorrectionBF`, or `CorrectionPID`,
+        the data. The correction could be of type `Correction1D`, `Correction1DFromCSV`, 
+        `CorrectionBF`, `Correction2D`, `Correction2DFromCSV`, or `CorrectionPID`,
         and each type defines a different set of variables. Column names are prefixed
         with one or more `prefices` defined for the object.
 
@@ -229,21 +230,35 @@ class Template(ABC, SavableAttributesObject):
         )
 
         # Collect the important variables based on the type of correction
-        if isinstance(self.correction, Correction1D):
+        if isinstance(self.correction, (Correction1D, Correction1DFromCSV)):
             variables = [
                 self.syst_weight,
                 self.correction.dependant_variable,
-                *list(self.correction.info["extra_cuts"].keys()),
             ]
+            # Add extra cuts if available
+            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts_columns" in self.correction.info and self.correction.info["extra_cuts_columns"] is not None:
+                variables.extend(list(self.correction.info["extra_cuts_columns"]))
         elif isinstance(self.correction, CorrectionBF):
             variables = [self.syst_weight, self.correction.dependant_variable]
-        elif isinstance(self.correction, Correction2D):
+        elif isinstance(self.correction, (Correction2D, Correction2DFromCSV)):
             variables = [
                 self.syst_weight,
                 self.correction.dependant_variable_1,
                 self.correction.dependant_variable_2,
-                *list(self.correction.info["extra_cuts"].keys()),
             ]
+            # Add extra cuts if available
+            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts_columns" in self.correction.info and self.correction.info["extra_cuts_columns"] is not None:
+                variables.extend(list(self.correction.info["extra_cuts_columns"]))
+        elif isinstance(self.correction, Correction3DFromCSV):
+            variables = [
+                self.syst_weight,
+                self.correction.dependant_variable_1,
+                self.correction.dependant_variable_2,
+                self.correction.dependant_variable_3,
+            ]
+            # Add extra cuts if available
+            if hasattr(self.correction, 'info') and self.correction.info is not None and "extra_cuts_columns" in self.correction.info and self.correction.info["extra_cuts_columns"] is not None:
+                variables.extend(list(self.correction.info["extra_cuts_columns"]))
         elif isinstance(self.correction, CorrectionPID):
             variables = [
                 self.syst_weight,
@@ -262,7 +277,7 @@ class Template(ABC, SavableAttributesObject):
             return list(set(self.df.columns))
         else:
             raise TypeError(
-                f"Type {type(self.correction)} not recognized. Please use Correction1D, CorrectionBF, Correction2D or CorrectionPID, CustomCorrection"
+                f"Type {type(self.correction)} not recognized. Please use Correction1D, Correction1DFromCSV, CorrectionBF, Correction2D, Correction2DFromCSV, CorrectionPID, or CustomCorrection"
             )
 
         if len(prefices) > 0:

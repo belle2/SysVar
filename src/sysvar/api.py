@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from typing import List, Iterable, Optional, Dict, Union
+from typing import List, Iterable, Optional, Dict, Union, Any
 from os import path
+from warnings import warn
+from pathlib import Path
 
 import numpy as np
 from pandas import DataFrame
@@ -27,41 +29,74 @@ logging.basicConfig(
 
 def add_weights_to_dataframe(
     df: DataFrame,
-    systematic: str,
-    MC_production: str,
-    prefix: str,
-    weightname: str,
+    correction_source: str | Path | dict,
+    MC_production: str | None = None,
+    prefix: str | None = None,
+    weightname: str | None = None,
     overwrite: bool = False,
     Nvar: int = 0,
 ):
     """
-    Add weight columns to a DataFrame.
+    Add correction weights (and optional toy variations) to a pandas DataFrame in-place.
 
-    This function augments `df` in-place by adding a central weight column whose
-    name is constructed from `prefix` and `weightname`, and filling it using
-    the configured correction for the given `systematic` and `MC_production`.
-    If `Nvar > 0`, it also adds `Nvar` variation columns (named
-    "{column_name}_var_{j}") and fills them from variations (toys) of the
-    central values of the corrections. A dedicated `Variator` object is used
-    internally to generate the toys.
+    This function computes per-row correction weights using a correction object created
+    from `correction_source` and writes them into `df` as a new column. The rows that
+    receive a given correction value are determined by boolean query strings produced
+    by `correction.build_queries(prefix)` and evaluated against `df` via `df.eval()`.
 
-    Parameters:
-        df (DataFrame): pandas DataFrame to be augmented (modified in-place).
-        systematic (str): Name of the systematic/correction to apply.
-        MC_production (str): MC production tag used to locate the correction.
-        prefix (str): Prefix used when building the weight column name.
-        weightname (str): Base name of the weight column to add.
-        overwrite (bool, optional): If True, overwrite an existing column with
-            the same name. Defaults to False.
-        Nvar (int, optional): Number of variation columns to add. Must be a
-            non-negative integer. If 0, only the central value column is added.
-            Defaults to 0.
+    If `Nvar > 0`, additional columns containing toy variations of the weights are
+    added as well (one column per toy). The toy weights are produced via a `Variator`
+    constructed from the correction.
 
-    Returns:
-        None: The DataFrame `df` is modified in-place.
+    Parameters
+    ----------
+    df:
+        The DataFrame to modify in-place.
+    correction_source:
+        Defines how to construct the correction:
+          - `Path`: treated as a path to a CSV/TSV correction table.
+          - `str`: either a correction identifier (YAML-based, legacy) or a path-like
+            string to a CSV.
+          - `dict`: a fully specified custom correction configuration.
+    MC_production:
+        MC production tag required for YAML-based corrections (legacy). Not used for
+        CSV-based inputs. May be ignored depending on `correction_source`.
+    prefix:
+        Optional prefix used when building the dependent-variable column names used in
+        the query strings (e.g. "trk" -> "trk_pt"). Passed through to
+        `correction.build_queries(prefix)`.
+    weightname:
+        Base name of the weight column. The final column name is built by
+        `correction._build_column_name(prefix, weightname)`.
+    overwrite:
+        If True and the target weight column already exists, it will be overwritten.
+        If False and the column exists, the function logs a warning and does not
+        modify the DataFrame.
+    Nvar:
+        Number of toy-variation columns to add. Must be a non-negative integer.
+        If 0, only the central weight column is added. If > 0, columns named
+        "{column_name}_var_{j}" for j in [0, Nvar-1] are added.
 
-    Raises:
-        ValueError: If `Nvar` is negative.
+    Returns
+    -------
+    None
+        The DataFrame is modified in-place.
+
+    Raises
+    ------
+    ValueError
+        If `Nvar` is negative, or if `correction_source` / `MC_production` do not form
+        a valid combination for constructing a correction.
+    Exception
+        Propagates any exception raised by `create_correction_object`, `df.eval`,
+        or by the correction/variator internals.
+
+    Notes
+    -----
+    - The queries produced by `correction.build_queries(prefix)` are evaluated using
+      `df.eval()`, so the DataFrame must contain the referenced columns.
+    - For correctness, the correction's binning (number of central values / queries)
+      must match the internal structure of the correction and the `Variator`.
     """
 
     if Nvar < 0:
@@ -83,31 +118,38 @@ def add_weights_to_dataframe(
             if variator is not None:
                 df.loc[mask, variation_columns] = variator.variations[:, i]
 
-    correction = create_correction_object(systematic, MC_production)
+    correction = create_correction_object(
+        correction_source=correction_source,
+        MC_production=MC_production,
+    )
     column_name = correction._build_column_name(prefix, weightname)
 
+    # Early skip: do not construct Variator and do not touch df
+    if column_name in df.columns and not overwrite:
+        logging.warning(
+            "%s exists but it will not be overwritten. Skipping. "
+            "If you want to overwrite set overwrite=True.",
+            column_name,
+        )
+        return
+
+    # Only build variator if we will actually write
     variator = Variator(correction, Nvar) if Nvar > 0 else None
 
     if column_name in df.columns and overwrite:
-        logging.info("%s exists but it will be overwriten", column_name)
-
-        _add_weights(df, correction, prefix, column_name, variator)
-
-    elif column_name in df.columns and not overwrite:
-
-        logging.warning(
-            "%s exists but it not will be ovewritten. Skipping. No weights are added. If you want to change this behaviour set the overwrite argument to True",
-            column_name,
-        )
-    elif column_name not in df.columns:
+        logging.info("%s exists and will be overwritten", column_name)
+    else:
         logging.info("%s does not exist. Adding it to dataframe", column_name)
-        _add_weights(df, correction, prefix, column_name, variator)
+
+    _add_weights(df, correction, prefix, column_name, variator)
 
 
 def eigendecompose(
     df: DataFrame,
-    settings: Dict,
-    syst_effect: str,
+    settings: dict[str, Any],
+    systematic_source: str | Path | dict,
+    title: str | None = None,
+    cov_matrix_path: str | Path | None = None,
     criterion: str = "max_differences",
     prc: float = 1e-4,
     max_variations: int | None = None,
@@ -117,35 +159,89 @@ def eigendecompose(
     seed: int = 8311311,
 ):
     """
-    Performs eigendecomposition on the input DataFrame based on specified settings,
-    systematic effect, and criterion, and returns the resulting `EigenDecomposer` object.
+    Run an eigendecomposition workflow and return the configured `EigenDecomposer`.
 
-    This function initializes an `EigenDecomposer` instance using the provided
-    DataFrame, settings, and systematic effect. It then applies a precision level
-    to the decomposition and identifies important eigendimension indices based on
-    the specified criterion. Optionally, it saves template variations.
+    This is a convenience wrapper around `EigenDecomposer` that:
+      1) constructs an `EigenDecomposer`,
+      2) generates template variations,
+      3) applies the requested precision / variation limits,
+      4) selects the important eigendimensions using `criterion`,
+      5) optionally persists variations and/or per-channel covariance matrices.
 
-    Args:
-        df (DataFrame): The input data to be decomposed.
-        settings (Dict): Configuration settings for the decomposition.
-        syst_effect (str): The systematic effect to consider.
-        criterion (str, optional): Criterion for selecting important eigendimensions.
-            Defaults to "max_differences".
-        prc (float, optional): Precision level for the decomposition. Defaults to 1e-4.
-        max_variations (int | None, optional): Maximum number of variations to consider taking into account the precision criterion. If None, all variations up to the precision are considered. Defaults to None.
-        save_variations (bool, optional): If True, saves template variations. Defaults to False.
-        save_channel_covariance_matrices (bool, optional): If True, saves covariance matrices per channel. Defaults to False.
-        verbose (bool, optional): If True, prints additional information during execution. Defaults to True.
-        seed (int, optional): Random seed for reproducibility. Defaults to 8311311.
+    Parameters
+    ----------
+    df:
+        Input DataFrame used by the decomposer (templates / channels / yields, as
+        expected by `EigenDecomposer`).
+    settings:
+        Configuration dictionary consumed by `EigenDecomposer` (e.g. channel
+        definitions, output paths, variables to use, etc.).
+    systematic_source:
+        Source used to build the underlying correction / systematic definition.
+        Typically one of:
+          - `str`: a correction/systematic identifier (e.g. YAML key; legacy),
+          - `Path` or path-like `str`: a CSV file describing the correction,
+          - `dict`: an in-memory correction configuration.
+        The exact interpretation is delegated to `EigenDecomposer`.
+    title (str | None, optional):
+        Custom identifier for CSV-based corrections.
 
-    Returns:
-        EigenDecomposer: An instance of the `EigenDecomposer` class containing the decomposition results.
+        If not provided, defaults to the CSV file stem (e.g. "track_eff" for
+        ".../track_eff.csv"). The identifier is used to match this correction to the
+        corresponding systematic configuration in the `settings` dictionary.
+
+            Example:
+                title="track_eff" must match the key/name used in settings["systematics"][...].
+    cov_matrix_path:
+        Optional path to an explicit covariance matrix to use instead of building
+        it from uncertainties. If provided, it is passed through to
+        `EigenDecomposer`.
+    criterion:
+        Criterion used to select “important” eigendimensions. Must be understood
+        by `EigenDecomposer.find_important_eigendimension_indices`.
+        Default is `"max_differences"`.
+    prc:
+        Precision threshold used to determine how many eigendimensions to keep.
+        Interpreted by the decomposer. Default is 1e-4.
+    max_variations:
+        Optional hard cap on the number of variations/eigendimensions to consider
+        (after applying the precision criterion). If None, no cap is applied.
+    save_variations:
+        If True, calls `EigenDecomposer.save_template_variations()`. This performs
+        file I/O to whatever output location the decomposer/settings define.
+    save_channel_covariance_matrices:
+        If True, calls `EigenDecomposer.save_channel_covariance_matrices()`. This
+        performs file I/O.
+    verbose:
+        If True, enables verbose output/logging in `EigenDecomposer`.
+    seed:
+        Random seed forwarded to `EigenDecomposer` for reproducibility.
+
+    Returns
+    -------
+    EigenDecomposer
+        The initialized decomposer instance containing the decomposition results
+        and selected eigendimensions.
+
+    Notes
+    -----
+    This function has optional side effects (writing files) when `save_variations`
+    and/or `save_channel_covariance_matrices` are enabled.
     """
+    egd = EigenDecomposer(
+        df=df,
+        settings=settings,
+        systematic_source=systematic_source,
+        title=title,
+        cov_matrix_path=cov_matrix_path,
+        verbose=verbose,
+        seed=seed,
+    )
 
-    egd = EigenDecomposer(df, settings, syst_effect, verbose=verbose, seed=seed)
-    egd.vary_templates()
     egd.precision = prc
     egd.max_variations = max_variations
+
+    egd.vary_templates()
     egd.find_important_eigendimension_indices(criterion)
 
     if save_variations:

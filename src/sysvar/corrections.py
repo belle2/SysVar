@@ -4,8 +4,9 @@ from functools import cached_property
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, InitVar
-from typing import List, Iterable, Optional
+from typing import List, Iterable, Optional, Any
 from os import path
+from pathlib import Path
 import matplotlib.pyplot as plt
 
 from particle import Particle
@@ -13,6 +14,7 @@ from particle import Particle
 import itertools
 import numpy as np
 from pandas import DataFrame, concat, read_csv
+import pandas as pd
 from uncertainties import unumpy as unp, ufloat
 
 from .uncertainties import (
@@ -47,6 +49,18 @@ class UnkownUncertaintyType(Exception):
 
 
 class NotValidRateType(Exception):
+    pass
+
+
+class InvalidCorrectionTableKey(Exception):
+    pass
+
+
+class CorrectionTablehasNaNValues(Exception):
+    pass
+
+
+class InvalidInfoDict(Exception):
     pass
 
 
@@ -118,6 +132,73 @@ class BaseCorrection(ABC, SavableAttributesObject):
             return self.uncertainties[list(self.uncertainties.keys())[0]].errors
         else:
             raise ValueError("No uncertainties have been added to the correction")
+
+    def _is_valid_info_dict(self) -> None:
+        self._require_key("cov_matrix")
+        self._validate_cov_matrix_value(self.info["cov_matrix"])
+
+    # ----------------------------
+    # Helpers (instance methods)
+    # ----------------------------
+
+    def _require_key(self, key: str) -> None:
+        if key not in self.info:
+            raise InvalidInfoDict(f"The info dictionary must contain a '{key}' key")
+
+    def _validate_cov_matrix_value(self, cov: Any) -> None:
+        """Validate cov_matrix value: None OR path OR array-like."""
+        if cov is None:
+            return
+
+        if isinstance(cov, (str, Path)):
+            self._validate_cov_matrix_path(cov)
+            return
+
+        if isinstance(cov, (list, tuple, np.ndarray)):
+            self._validate_cov_matrix_arraylike(cov)
+            return
+
+        raise InvalidInfoDict(
+            f"'cov_matrix' must be None, a path (str/Path), or an array-like "
+            f"(list/tuple/np.ndarray). Got: {type(cov)}"
+        )
+
+    def _validate_cov_matrix_path(self, path_value: str | Path) -> None:
+        p = Path(path_value)
+
+        if not p.exists():
+            raise InvalidInfoDict(f"'cov_matrix' path does not exist: {p}")
+
+        allowed_suffixes = {
+            ".npy",
+            ".tsv",
+        }
+        if p.suffix not in allowed_suffixes:
+            raise InvalidInfoDict(
+                f"Unsupported cov_matrix file type '{p.suffix}'. "
+                f"Supported: {', '.join(sorted(allowed_suffixes))}"
+            )
+
+    def _validate_cov_matrix_arraylike(self, cov: Any) -> None:
+        arr = np.asarray(cov, dtype=float)
+
+        if arr.ndim != 2:
+            raise InvalidInfoDict("'cov_matrix' must be a 2D array-like (NxN).")
+
+        n, m = arr.shape
+        if n == 0 or m == 0:
+            raise InvalidInfoDict("'cov_matrix' cannot be empty.")
+        if n != m:
+            raise InvalidInfoDict(
+                f"'cov_matrix' must be square (NxN). Got shape {arr.shape}."
+            )
+
+        if not np.isfinite(arr).all():
+            raise InvalidInfoDict("'cov_matrix' contains NaN or inf values.")
+
+        # Optional but recommended
+        if not np.allclose(arr, arr.T, rtol=0, atol=1e-12):
+            raise InvalidInfoDict("'cov_matrix' must be symmetric.")
 
     def add_uncertainty(
         self,
@@ -237,6 +318,7 @@ class BaseCorrectionFromYaml(BaseCorrection):
             raise MissingInformationError(
                 f"Need to specify the systematic effect and the MC production in the positional arguments. You passed {self.systematic} and {self.MC_production}"
             )
+        self._is_valid_info_dict()
 
         self.visualizer = None
         self.title = self.info["title"]
@@ -346,6 +428,179 @@ class BaseCorrectionFromYaml(BaseCorrection):
         return path.join(self.table_dir, filename)
 
 
+@dataclass()
+class BaseCorrectionFromCSV(BaseCorrection):
+    """
+    CSV-driven base class that standardizes reading corrections (central values and
+    uncertainties) from a single, long-form CSV file.
+
+    The CSV is expected to contain at least:
+      - 'central_value'
+    Optional uncertainty columns (if present they are auto-mapped):
+      - 'stat_corr', 'sys_corr'    -> fully_correlated
+      - 'stat_uncorr', 'sys_uncorr'-> uncorrelated
+    Optional extra metadata columns that 1D/2D specializations will use:
+      - 'dependant_variable' or 'dependant_variable_1' and 'dependant_variable_2'
+      - '{var}_unit', '{var}_min', '{var}_max' for each dependant variable
+    Optional extra cut columns for automatic query enhancement:
+      - 'PDG': PDG codes as strings in format "[521,-521]" or "[521]"
+      - 'mcPDG': MC truth PDG codes as strings in format "[521,-521]" or "[521]"
+      Note: Only string format like "[521,-521]" is supported.
+    Optional explicit covariance matrix:
+      - 'cov_matrix_path': Path to file containing explicit covariance matrix
+    """
+
+    csv_path: str | None = None
+    title: str | None = None
+    cov_matrix_path: str | None = None
+
+    def __post_init__(self):
+        super().__init__()
+        if self.csv_path is None:
+            raise MissingInformationError(
+                "csv_path must be provided when using BaseCorrectionFromCSV."
+            )
+
+        # loading all columns for the csv file to enforce string dtype on unit columns
+        cols = pd.read_csv(self.csv_path, nrows=0).columns
+
+        # Enforce string dtype on unit columns
+        unit_converters = {col: str for col in cols if "unit" in col.lower()}
+
+        self.table = read_csv(self.csv_path, converters=unit_converters, na_filter=True)
+
+        self._is_valid_table()
+
+        # Handle explicit covariance matrix
+        if self.cov_matrix_path is not None:
+            if not path.exists(self.cov_matrix_path):
+                raise ValueError(
+                    f"Covariance matrix file not found: {self.cov_matrix_path}"
+                )
+            # Create a minimal info dict for load_covariance_matrix
+            cov_info = {"cov_matrix": self.cov_matrix_path}
+            self.cov_matrix = load_covariance_matrix(cov_info)
+
+        else:
+            self.cov_matrix = None
+
+        self.info = self._build_info_from_table()
+        self._is_valid_info_dict()
+        self.title = (
+            self.title if isinstance(self.title, str) else path.basename(self.csv_path)
+        )
+        self.visualizer = None
+
+    def _is_valid_table(self) -> None:
+
+        if self.table is None or len(self.table) == 0:
+            raise ValueError(f"No data found in CSV at {self.csv_path}")
+
+        # Validate PDG string format if these columns exist
+        for pdg_column in ["PDG", "mcPDG"]:
+            if pdg_column in self.table.columns:
+                for row_index, pdg_value in enumerate(self.table[pdg_column].tolist()):
+                    if (
+                        isinstance(pdg_value, str)
+                        and pdg_value.startswith("[")
+                        and pdg_value.endswith("]")
+                    ):
+                        pdg_list_text = pdg_value.strip("[]").strip()
+                        if pdg_list_text == "":
+                            continue
+                        try:
+                            _ = [int(x.strip()) for x in pdg_list_text.split(",")]
+                        except Exception:
+                            raise ValueError(
+                                f"Row {row_index} in column '{pdg_column}' has invalid PDG list format: {pdg_value}"
+                            )
+                    elif pd.isna(pdg_value):
+                        continue
+                    else:
+                        raise ValueError(
+                            f"Column '{pdg_column}' must use string list format like '[521,-521]'; got: {pdg_value} with datatype {type(pdg_value)}"
+                        )
+
+    def _build_info_from_table(self) -> dict:
+        """
+        Build a lightweight info dictionary compatible with BaseCorrection.populate_uncertainties.
+        """
+        extra_cuts_columns = [
+            col
+            for col in self.table.columns
+            if col in ["PDG", "mcPDG"] and self.table[col].notna().any()
+        ]
+
+        # If explicit covariance matrix is provided, skip individual uncertainty columns
+        if self.cov_matrix is not None:
+            info = {
+                "uncertainties": {},
+                "extra_cuts_columns": extra_cuts_columns,
+                "cov_matrix": self.cov_matrix_path,
+            }
+            return info
+
+        uncertainties: dict = {
+            "fully_correlated": {},
+            "uncorrelated": {},
+        }
+        for key in ["stat_corr", "sys_corr", "stat_uncorr", "sys_uncorr"]:
+            if key not in self.table:
+                raise InvalidCorrectionTableKey(
+                    f"Missing key in correction table: {key}"
+                )
+
+            values = self.table[key].tolist()
+
+            if not any(np.isnan(values)) and not any(np.isinf(values)):
+                if key.endswith("_corr"):
+                    uncertainties["fully_correlated"][key] = values
+                elif key.endswith("_uncorr"):
+                    uncertainties["uncorrelated"][key] = values
+
+        uncertainties = {k: v for k, v in uncertainties.items() if len(v) > 0}
+
+        info = {
+            "uncertainties": uncertainties,
+            "extra_cuts_columns": extra_cuts_columns,
+            "cov_matrix": None,
+        }
+        return info
+
+    def add_extra_cuts(self, queries: list, prefix: str | None) -> list:
+
+        pdg_columns = ["PDG", "mcPDG"]
+
+        for row_index, base_query in enumerate(queries):
+            extra_conditions = []
+
+            for pdg_column in pdg_columns:
+                if pdg_column in self.table.columns:
+                    pdg_value = self.table[pdg_column].iloc[row_index]
+
+                    if pd.isna(pdg_value):
+                        continue
+
+                    pdg_list_text = pdg_value.strip("[]").strip()
+                    if pdg_list_text == "":
+                        continue
+
+                    pdg_list = [int(x.strip()) for x in pdg_list_text.split(",")]
+
+                    column_name = self._build_column_name(prefix, pdg_column)
+
+                    if len(pdg_list) == 1:
+                        extra_conditions.append(f"{column_name} == {pdg_list[0]}")
+                    else:
+                        extra_conditions.append(f"{column_name} in {pdg_list}")
+
+            if extra_conditions:
+                modified_query = f"({base_query}) & ({' & '.join(extra_conditions)})"
+                queries[row_index] = modified_query
+
+        return queries
+
+
 @dataclass
 class Correction1D(BaseCorrectionFromYaml):
 
@@ -424,6 +679,154 @@ class Correction1D(BaseCorrectionFromYaml):
         queries = self.add_extra_cuts(queries, prefix)
 
         return queries
+
+
+@dataclass
+class Correction1DFromCSV(BaseCorrectionFromCSV):
+    """
+    1D correction reader from a single CSV.
+    Expects columns:
+      - 'central_value'
+      - 'dependant_variable' or 'dependant_variable_1'
+      - '{var}_unit' (optional)
+      - Either: '{var}_min', '{var}_max' for bin edges (continuous bins)
+      - Or: column named '{var}' with discrete integer values (uses equality queries)
+
+    """
+
+    dependant_variable: str | None = None
+    central_values: Iterable = None
+    lower_bounds: Iterable = None
+    upper_bounds: Iterable = None
+    unit: str | None = None
+    use_equality_queries: bool = False
+    variable_values: Iterable = None
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        self._is_valid_1D_table()
+
+        self.unit = self.get_unit()
+
+        # Determine if using bin edges or discrete values for corrections.
+        # If both min and max columns are present, use bin edges. Otherwise, look for discrete values which builds queries using equality.
+        min_col = f"{self.dependant_variable}_min"
+        max_col = f"{self.dependant_variable}_max"
+
+        if min_col in self.table and max_col in self.table:
+            self.use_equality_queries = False
+            self.lower_bounds = self.table[min_col].tolist()
+            self.upper_bounds = self.table[max_col].tolist()
+        elif self.dependant_variable in self.table:
+            self.use_equality_queries = True
+            self.variable_values = self.table[self.dependant_variable].tolist()
+        else:
+            raise ValueError(
+                f"CSV must contain either '{min_col}' and '{max_col}' columns for bin edges, "
+                f"or a '{self.dependant_variable}' column with discrete values."
+            )
+
+        self.central_values = self.table["central_value"].tolist()
+
+        self.populate_uncertainties()
+
+    def _is_valid_1D_table(self) -> None:
+
+        if "dependant_variable" in self.table:
+            self.dependant_variable = str(
+                self.table["dependant_variable"].iloc[0]
+            ).strip()
+        elif "dependant_variable_1" in self.table:
+            self.dependant_variable = str(
+                self.table["dependant_variable_1"].iloc[0]
+            ).strip()
+        else:
+            raise ValueError(
+                "CSV must contain 'dependant_variable' or 'dependant_variable_1' column."
+            )
+
+    def get_unit(self) -> str:
+        """Return the unit associated with the dependent variable.
+
+        This property attempts to determine the unit column in the table
+        using the following priority:
+            1. A column named "{dependent_variable}_unit".
+            2. A column named "unit".
+            3. The first column that ends with "_unit".
+
+        If a matching unit column is found, the value from the first row
+        of that column is returned. If no such column exists, an empty
+        string is returned.
+
+        Returns:
+            str: The unit string if found; otherwise an empty string.
+        """
+        unit_col_candidates = [f"{self.dependant_variable}_unit", "unit"]
+        unit_col = next(
+            (c for c in unit_col_candidates if c in self.table.columns), None
+        )
+        if unit_col is None:
+            unit_cols = [c for c in self.table.columns if c.endswith("_unit")]
+            unit_col = unit_cols[0] if len(unit_cols) > 0 else None
+
+        if unit_col is not None:
+            return self.table[unit_col].iloc[0]
+        else:
+            return ""
+
+    @property
+    def value_edges(self) -> np.ndarray:
+        if self.use_equality_queries:
+            unique_vals = list(dict.fromkeys(self.variable_values))
+            return np.arange(len(unique_vals) + 1)
+        else:
+            return np.unique(np.concatenate((self.lower_bounds, self.upper_bounds)))
+
+    @property
+    def value_mids(self) -> np.ndarray:
+        if self.use_equality_queries:
+            unique_vals = list(dict.fromkeys(self.variable_values))
+            return np.arange(len(unique_vals))
+        else:
+            return (self.value_edges[1:] + self.value_edges[:-1]) / 2
+
+    @property
+    def visual_labels(self) -> List[str]:
+        label_col_candidates = [f"{self.dependant_variable}_label", "label"]
+        label_col = next(
+            (c for c in label_col_candidates if c in self.table.columns), None
+        )
+        if label_col is None:
+            label_cols = [c for c in self.table.columns if c.endswith("_label")]
+            label_col = label_cols[0] if len(label_cols) > 0 else None
+
+        if label_col is not None:
+            return self.table[label_col].tolist()
+
+        if self.use_equality_queries:
+            return [
+                f"{self.dependant_variable} = {val} {self.unit}"
+                for val in self.variable_values
+            ]
+        else:
+            return [
+                f"{low} < {self.dependant_variable} < {up} {self.unit}"
+                for low, up in zip(self.lower_bounds, self.upper_bounds)
+            ]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+        column_name = self._build_column_name(prefix, self.dependant_variable)
+
+        if self.use_equality_queries:
+            queries = [f"{column_name} == {val}" for val in self.variable_values]
+        else:
+            queries = [
+                f"{low} <= {column_name} < {up}"
+                for low, up in zip(self.lower_bounds, self.upper_bounds)
+            ]
+
+        return self.add_extra_cuts(queries, prefix)
 
 
 @dataclass
@@ -536,6 +939,204 @@ class Correction2D(BaseCorrectionFromYaml):
                 unc_values=unc_values,
                 unc_obj=sysvar_uncertainties[unc_ctgy],
             )
+
+
+@dataclass
+class Correction2DFromCSV(BaseCorrectionFromCSV):
+    """
+    2D correction reader from a single CSV.
+    Expects columns:
+      - 'central_value'
+      - 'dependant_variable_1', 'dependant_variable_2'
+      - '{var1}_unit', '{var2}_unit'
+      - '{var1}_min','{var1}_max','{var2}_min','{var2}_max'
+    """
+
+    dependant_variable_1: str | None = None
+    dependant_variable_2: str | None = None
+    unit_1: str | None = None
+    unit_2: str | None = None
+    central_values: Iterable = None
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        self._is_valid_2D_table()
+
+        self.dependant_variable_1 = str(
+            self.table["dependant_variable_1"].iloc[0]
+        ).strip()
+        self.dependant_variable_2 = str(
+            self.table["dependant_variable_2"].iloc[0]
+        ).strip()
+
+        # Units
+        unit1_col = f"{self.dependant_variable_1}_unit"
+        unit2_col = f"{self.dependant_variable_2}_unit"
+        self.unit_1 = self.table[unit1_col].iloc[0] if unit1_col in self.table else ""
+        self.unit_2 = self.table[unit2_col].iloc[0] if unit2_col in self.table else ""
+
+        # Edges
+        self._v1_min = f"{self.dependant_variable_1}_min"
+        self._v1_max = f"{self.dependant_variable_1}_max"
+        self._v2_min = f"{self.dependant_variable_2}_min"
+        self._v2_max = f"{self.dependant_variable_2}_max"
+        for c in (self._v1_min, self._v1_max, self._v2_min, self._v2_max):
+            if c not in self.table.columns:
+                raise ValueError(f"CSV must contain '{c}' column for 2D bin edges.")
+
+        self.central_values = self.table["central_value"].tolist()
+
+        self.populate_uncertainties()
+
+    def _is_valid_2D_table(self) -> None:
+
+        if (
+            "dependant_variable_1" not in self.table
+            or "dependant_variable_2" not in self.table
+        ):
+            raise ValueError(
+                "CSV must contain 'dependant_variable_1' and 'dependant_variable_2' column."
+            )
+
+    @property
+    def iterator(self):
+        # Provide a generator over rows with unpacked bins
+        for _, row in self.table.iterrows():
+            yield (
+                row[self._v1_min],
+                row[self._v1_max],
+                row[self._v2_min],
+                row[self._v2_max],
+            )
+
+    @property
+    def visual_labels(self) -> List[str]:
+        return [
+            f"{v1min} <= {self.dependant_variable_1} < {v1max} {self.unit_1} & "
+            f"{v2min} <= {self.dependant_variable_2} < {v2max} {self.unit_2}"
+            for (v1min, v1max, v2min, v2max) in self.iterator
+        ]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+        column_name_1 = self._build_column_name(prefix, self.dependant_variable_1)
+        column_name_2 = self._build_column_name(prefix, self.dependant_variable_2)
+        queries = [
+            f"{v1min} <= {column_name_1} < {v1max} & "
+            f"{v2min} <= {column_name_2} < {v2max}"
+            for (v1min, v1max, v2min, v2max) in self.iterator
+        ]
+        return self.add_extra_cuts(queries, prefix)
+
+
+@dataclass
+class Correction3DFromCSV(BaseCorrectionFromCSV):
+    """
+    3D correction reader from a single CSV.
+    Expects columns:
+      - 'central_value'
+      - 'dependant_variable_1', 'dependant_variable_2', 'dependant_variable_3'
+      - '{var1}_unit', '{var2}_unit', '{var3}_unit'
+      - '{var1}_min','{var1}_max','{var2}_min','{var2}_max','{var3}_min','{var3}_max'
+    """
+
+    dependant_variable_1: str | None = None
+    dependant_variable_2: str | None = None
+    dependant_variable_3: str | None = None
+    unit_1: str | None = None
+    unit_2: str | None = None
+    unit_3: str | None = None
+    central_values: Iterable = None
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        self._is_valid_3D_table()
+
+        self.dependant_variable_1 = str(
+            self.table["dependant_variable_1"].iloc[0]
+        ).strip()
+        self.dependant_variable_2 = str(
+            self.table["dependant_variable_2"].iloc[0]
+        ).strip()
+        self.dependant_variable_3 = str(
+            self.table["dependant_variable_3"].iloc[0]
+        ).strip()
+
+        # Units
+        unit1_col = f"{self.dependant_variable_1}_unit"
+        unit2_col = f"{self.dependant_variable_2}_unit"
+        unit3_col = f"{self.dependant_variable_3}_unit"
+        self.unit_1 = self.table[unit1_col].iloc[0] if unit1_col in self.table else ""
+        self.unit_2 = self.table[unit2_col].iloc[0] if unit2_col in self.table else ""
+        self.unit_3 = self.table[unit3_col].iloc[0] if unit3_col in self.table else ""
+
+        # Edges
+        self._v1_min = f"{self.dependant_variable_1}_min"
+        self._v1_max = f"{self.dependant_variable_1}_max"
+        self._v2_min = f"{self.dependant_variable_2}_min"
+        self._v2_max = f"{self.dependant_variable_2}_max"
+        self._v3_min = f"{self.dependant_variable_3}_min"
+        self._v3_max = f"{self.dependant_variable_3}_max"
+        for c in (
+            self._v1_min,
+            self._v1_max,
+            self._v2_min,
+            self._v2_max,
+            self._v3_min,
+            self._v3_max,
+        ):
+            if c not in self.table.columns:
+                raise ValueError(f"CSV must contain '{c}' column for 2D bin edges.")
+
+        self.central_values = self.table["central_value"].tolist()
+
+        self.populate_uncertainties()
+
+    def _is_valid_3D_table(self) -> None:
+
+        if (
+            "dependant_variable_1" not in self.table
+            or "dependant_variable_2" not in self.table
+            or "dependant_variable_3" not in self.table
+        ):
+            raise ValueError(
+                "CSV must contain 'dependant_variable_1', 'dependant_variable_2' and 'dependant_variable_3' column."
+            )
+
+    @property
+    def iterator(self):
+        # Provide a generator over rows with unpacked bins
+        for _, row in self.table.iterrows():
+            yield (
+                row[self._v1_min],
+                row[self._v1_max],
+                row[self._v2_min],
+                row[self._v2_max],
+                row[self._v3_min],
+                row[self._v3_max],
+            )
+
+    @property
+    def visual_labels(self) -> List[str]:
+        return [
+            f"{v1min} <= {self.dependant_variable_1} < {v1max} {self.unit_1} & "
+            f"{v2min} <= {self.dependant_variable_2} < {v2max} {self.unit_2} & "
+            f"{v3min} <= {self.dependant_variable_3} < {v3max} {self.unit_3}"
+            for (v1min, v1max, v2min, v2max, v3min, v3max) in self.iterator
+        ]
+
+    def build_queries(self, prefix: str | None = None) -> list:
+        column_name_1 = self._build_column_name(prefix, self.dependant_variable_1)
+        column_name_2 = self._build_column_name(prefix, self.dependant_variable_2)
+        column_name_3 = self._build_column_name(prefix, self.dependant_variable_3)
+        queries = [
+            f"{v1min} <= {column_name_1} < {v1max} & "
+            f"{v2min} <= {column_name_2} < {v2max} & "
+            f"{v3min} <= {column_name_3} < {v3max}"
+            for (v1min, v1max, v2min, v2max, v3min, v3max) in self.iterator
+        ]
+        return self.add_extra_cuts(queries, prefix)
 
 
 @dataclass
@@ -710,6 +1311,7 @@ class CustomCorrection(BaseCorrection):
 
     def __post_init__(self, info):
         self.info = info
+        self._is_valid_info_dict()
 
         self.dependant_variable = self.info["dependant_variable"]
         self.central_values = self.info["central_values"]
@@ -939,22 +1541,37 @@ class CorrectionPID(BaseCorrectionFromYaml):
 
 
 def create_correction_object(
-    syst_effect: str | dict | None, MC_prod: str
+    correction_source: str | Path | dict,
+    MC_production: str | None = None,
+    title: str | None = None,
+    cov_matrix_path: str | None = None,
 ) -> BaseCorrection:
-    """Retrieves amd creates the appropriate correction object based on the systematic effect and MC production type.
+    """Retrieves and creates the appropriate correction object based on the systematic effect and MC production type.
 
     Args:
-        syst_effect (str): The systematic effect identifier.
-        MC_prod (str): The Monte Carlo production type identifier.
+        correcction source (str): The systematic effect identifier for YAML-based corrections, or CSV file path for CSV-based corrections.
+        MC_production (str, optional): The Monte Carlo production type identifier. Required for YAML-based corrections.
+        title (str, optional): Title for CSV-based corrections. If not provided, will use filename.
+        cov_matrix_path (str, optional): Path to explicit covariance matrix file for CSV-based corrections.
 
     Returns:
         BaseCorrection: The appropriate correction object based on the provided systematic effect and MC production type.
 
     Raises:
         NotImplementedError: If the correction type specified in the configuration is not implemented.
+        ValueError: If invalid combination of arguments is provided.
 
     Example:
-        >>> correction = get_correction_object("syst1", "MC1")
+        >>> # YAML-based correction
+        >>> correction = create_correction_object("syst1", "MC1")
+        >>> isinstance(correction, BaseCorrection)
+        True
+        >>> # CSV-based correction
+        >>> correction = create_correction_object(csv_path="path/to/file.csv", csv_type="1D")
+        >>> isinstance(correction, BaseCorrection)
+        True
+        >>> # CSV-based correction with explicit covariance matrix
+        >>> correction = create_correction_object(csv_path="path/to/file.csv", cov_matrix_path="path/to/cov.txt")
         >>> isinstance(correction, BaseCorrection)
         True
     """
@@ -966,23 +1583,79 @@ def create_correction_object(
         "PID": CorrectionPID,
     }
 
-    if isinstance(syst_effect, str):
-        corr_type = read_yaml(syst_effect, MC_prod)["correction_type"]
+    csv_correction_types = {
+        "1D": Correction1DFromCSV,
+        "2D": Correction2DFromCSV,
+        "3D": Correction3DFromCSV,
+    }
+
+    # Handle CSV-based corrections
+    if isinstance(correction_source, (Path)) or (
+        isinstance(correction_source, str) and correction_source.endswith(".csv")
+    ):
+        if not path.exists(correction_source):
+            raise ValueError(f"CSV file not found: {correction_source}")
+
+        # Determine correction type from CSV structure
+        try:
+            test_table = read_csv(correction_source)
+            if (
+                "dependant_variable_1" in test_table.columns
+                and "dependant_variable_2" in test_table.columns
+                and "dependant_variable_3" in test_table.columns
+            ):
+                csv_type = "3D"
+            elif (
+                "dependant_variable_1" in test_table.columns
+                and "dependant_variable_2" in test_table.columns
+            ):
+                csv_type = "2D"
+            elif (
+                "dependant_variable" in test_table.columns
+                or "dependant_variable_1" in test_table.columns
+            ):
+                csv_type = "1D"
+            else:
+                raise ValueError(
+                    "Cannot determine CSV correction type from columns. Please specify csv_type."
+                )
+        except Exception as e:
+            raise ValueError(f"Error reading CSV file {correction_source}: {e}")
+
+        if csv_type not in csv_correction_types:
+            raise NotImplementedError(
+                f"Available CSV correction types are: {list(csv_correction_types.keys())} but you passed {csv_type}"
+            )
+
+        return csv_correction_types[csv_type](
+            csv_path=correction_source, title=title, cov_matrix_path=cov_matrix_path
+        )
+
+    # Handle YAML-based corrections
+    elif isinstance(correction_source, str) and MC_production is not None:
+        MC_production = MC_production if MC_production is not None else ""
+        if MC_production == "":
+            raise ValueError("MC_production is required for YAML-based corrections")
+
+        corr_type = read_yaml(correction_source, MC_production)["correction_type"]
 
         try:
             return correction_types[corr_type](
-                systematic=syst_effect, MC_production=MC_prod
+                systematic=correction_source, MC_production=MC_production
             )
         except KeyError:
             raise NotImplementedError(
                 f"Available corrections are: {list(correction_types.keys())} but you passed {corr_type}"
             )
-    elif isinstance(syst_effect, dict):
-        return CustomCorrection(info=syst_effect)
+
+    # Handle custom corrections
+    elif isinstance(correction_source, dict):
+        return CustomCorrection(info=correction_source)
 
     else:
         raise ValueError(
-            "Pass a string for existing standard systematic to create a correction object from yaml files or a dictionary to create a custom correction object"
+            "Pass a string for existing standard systematic to create a correction object from yaml files, "
+            "a dictionary to create a custom correction object, or provide csv_path for CSV-based corrections"
         )
 
 
@@ -1289,8 +1962,6 @@ class CorrectionTableFinder:
         # Create the file names.
         # These are both for plus and minus
         if self.particle_species in ["kaon", "pion"]:
-            # First build the names for positive charge
-            file_names = [self.build_hid_table_name(x, "p") for x in table_ids]
             # Now add thhe names for negative charge
             file_names.extend([self.build_hid_table_name(x, "m") for x in table_ids])
 

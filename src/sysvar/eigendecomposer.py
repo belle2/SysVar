@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from os import path, makedirs
+from pathlib import Path
 import itertools
 from functools import cached_property
 from typing import List
+from warnings import warn
 
 from tqdm import tqdm
 
@@ -33,25 +35,73 @@ class EigenDecomposer(ChannelTemplateHandler):
         self,
         df: DataFrame,
         settings: dict,
-        syst_effect: str | dict | None,
+        systematic_source: str | dict | Path | None = None,
+        cov_matrix_path: str | None = None,
+        title: str | None = None,
         verbose: bool = True,
         seed: int = 8311311,
     ):
+        """
+        Initialize an EigenDecomposer for systematic uncertainty analysis.
+
+        Args:
+            df (DataFrame): The input dataframe containing the data to be analyzed.
+            settings (dict): Configuration settings containing analysis parameters.
+            syst_effect (str | dict | None, optional): Systematic effect identifier for YAML-based corrections.
+                Can be a string (systematic name) or dict (custom correction).
+                Required if csv_path is not provided.
+            verbose (bool, optional): Whether to enable verbose logging. Defaults to True.
+            csv_path (str | None, optional): Path to CSV file for CSV-based corrections.
+                If provided, syst_effect is ignored.
+            title (str | None, optional): Custom title for CSV-based corrections.
+                If not provided, will use the CSV filename.
+
+        Raises:
+            ValueError: If neither syst_effect nor csv_path is provided, or if invalid types are passed.
+
+        Examples:
+            >>> # YAML-based correction
+            >>> decomposer = EigenDecomposer(df, settings, syst_effect="track_eff")
+
+            >>> # CSV-based correction
+            >>> decomposer = EigenDecomposer(df, settings, csv_path="corrections/track_eff.csv")
+
+        """
 
         super().__init__(df, settings, verbose)
 
-        if isinstance(syst_effect, dict):
-            self._syst_effect = syst_effect["name"]
-        elif isinstance(syst_effect, str):
-            self._syst_effect = syst_effect
-        elif syst_effect is None:
-            ValueError("syst_effect must be a string or a dict but you pass None")
+        # Default MC production to None, will be set if YAML-based correction is used
+        MC_production = None
+        # Handle CSV-based corrections
+        if isinstance(systematic_source, (Path)) or (
+            isinstance(systematic_source, str) and systematic_source.endswith(".csv")
+        ):
+            systematic_source = Path(
+                systematic_source
+            )  # Ensure it's a Path object for consistent handling
+            # THis will help identify the systematic effect in the settings
+            self._syst_effect = systematic_source.stem if title is None else title
+        # Handle YAML-based corrections
+        elif isinstance(systematic_source, str):
+            warn(
+                "Deprecation warning: YAML-based corrections from the Performance group are deprecated since MC16rd and will be removed in a future release. "
+                "Please migrate to the CSV-based corrections. "
+                "YAML corrections will remain available only for custom (user-provided) corrections, but future support is not guaranteed.",
+                DeprecationWarning,
+            )
+            self._syst_effect = systematic_source.stem if title is None else title
+            MC_production = settings["MC_prod"]
+        elif isinstance(systematic_source, dict):
+            self._syst_effect = systematic_source["name"]
         else:
-            ValueError(
-                f"syst_effect must be a string or a dict but you pass {type(syst_effect)}"
+            raise ValueError(
+                f"systematic_source must be a string or a dict or a path to a csv file but you passed {type(systematic_source)}"
             )
 
-        self.correction = create_correction_object(syst_effect, settings["MC_prod"])
+        self.correction = create_correction_object(
+            correction_source=systematic_source, MC_production=MC_production
+        )
+
         self.seed = seed
         self.variator = Variator(self.correction, Nvar=settings["Nvar"], seed=seed)
         self.N_important_dims = 0
@@ -204,7 +254,10 @@ class EigenDecomposer(ChannelTemplateHandler):
             self.N_important_dims,
             self.precision,
         )
-        if self.max_variations is not None and self.N_important_dims == self.max_variations:
+        if (
+            self.max_variations is not None
+            and self.N_important_dims == self.max_variations
+        ):
             logging.info(
                 f"Keeping only the first %s eigendirections",
                 self.max_variations,

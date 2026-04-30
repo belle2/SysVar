@@ -14,7 +14,7 @@ def get_uncertainty_types():
         "fully_correlated": FullyCorrelatedUncertainty,
         "uncorrelated": UncorrelatedUncertainty,
         "explicitly_correlated": ExplicitlyCorrelatedUncertainty,
-        "fully_correlated_in_parts": FullyCorrelatedUncertaintyInParts,
+        # "fully_correlated_in_parts": FullyCorrelatedUncertaintyInParts,
     }
 
 
@@ -190,6 +190,9 @@ class FullyCorrelatedUncertaintyInParts(Uncertainty):
             errors (Iterable): An iterable containing the error values.
 
         """
+        raise NotImplementedError(
+            "FullyCorrelatedUncertaintyInParts is not supported currently. This would be useful when we have corrections which are fully correlated in some regions and completely uncorrelated in other regions. e.g. Corrections for Run1 MC and Run2 MC separately."
+        )
         self._is_valid_input_errors(errors)
         self.part_dimensions = part_dimensions
         self.corr_matrix = self.build_correlation_matrix()
