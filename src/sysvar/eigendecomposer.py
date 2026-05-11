@@ -99,7 +99,7 @@ class EigenDecomposer(ChannelTemplateHandler):
             )
 
         self.correction = create_correction_object(
-            correction_source=systematic_source, MC_production=MC_production
+            correction_source=systematic_source, MC_production=MC_production, cov_matrix_path=cov_matrix_path
         )
 
         self.seed = seed
