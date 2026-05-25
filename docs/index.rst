@@ -4,7 +4,7 @@ SysVar
 
 .. note::
 
-    The code repository is available on `GitLab <https://gitlab.desy.de/belle2/software/sysvar>`_
+    The code repository is available on `GitHub <https://github.com/belle2/SysVar>`_
 
 **SysVar** is a Python package that streamlines the treatment of systematic uncertainties for collider-physics analyses that rely on Monte-Carlo *template* fits. It was originally developed within the Belle II context, but its design and interfaces are experiment-agnostic.
 
@@ -17,7 +17,7 @@ MC prediction, however, is never used raw. Event-by-event correction weights are
 
 If fits span multiple channels, multiple templates, multiple observables — keeping book of all correlations becomes non-trivial. Analysts either over-approximate (inflating uncertainties) or lose correlations (biasing the fit). SysVar solves this by providing an end-to-end, consistent machinery to build template histograms and their systematic variations with correlations preserved.
 
-`pyhf`_ is now widely used in HEP as the backend for template fits. At present, `pyhf`_ allows nuisance parameters to be fully correlated across bins (via `histosys <https://pyhf.readthedocs.io/en/v0.7.2/likelihood.html#correlated-shape-histosys>`_ modifiers), but it does not provide a native mechanism for encoding partial bin-to-bin correlations arising from systematic variations applied at the event level. 
+`pyhf`_ is now widely used in HEP as the backend for template fits. At present, `pyhf`_ allows nuisance parameters to be fully correlated across bins (via `histosys <https://pyhf.readthedocs.io/en/v0.7.2/likelihood.html#correlated-shape-histosys>`_ modifiers), but it does not provide a native mechanism for encoding partial bin-to-bin correlations arising from systematic variations applied at the event level.
 
 A standard way to recover these correlations is the following:
 

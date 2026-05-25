@@ -52,6 +52,12 @@ For getting familiar with the functioning and concepts of the package, a nice pl
 
 ## Setting the SysVar Path
 
+If you are running with an environment sourced from CVMFS, you will likely encounter the following error:
+
+```
+ModuleNotFoundError: No module named 'sysvar.utils'; 'sysvar' is not a package
+```
+
 **Please add the following two lines at the very beginning of every scipt that uses SysVar to point to the location where you have installed your SysVar fork**
 
 ```
@@ -61,19 +67,23 @@ sys.path.insert(0,'{path_where_you_pip_installed_sysvar}/SysVar/src')
 
 This step is currently necessary because the basf2 developers have renamed their `pidvar` class to `sysvar`, anticipating an early merge of the SysVar package into basf2.
 
-If you are running with an environment sourced from CVMFS and have not executed the code above, you will encounter the following error:
+## Documentation
 
-```
-ModuleNotFoundError: No module named 'sysvar.utils'; 'sysvar' is not a package
-```
+Please refer to the sphinx page.
 
-## Further Reading
+- [Sphinx webpage](https://sysvar.belle2.org)
 
-We do not yet have a dedicated Sphinx webpage (coming soon), so we refer interested users to the following Belle II internal material:
+## Further reads
+
+Public material:
+
+- [Presentation at the "Challenges in Semileptonic B Decays" outlining new gateways for measurement combinations](https://indico.cern.ch/event/1345421/contributions/6084737/)
+- [Poster at CHEP 2026](https://indico.cern.ch/event/1471803/contributions/6968268/)
+
+Belle II internal material:
 
 - [Technical talk at the Analysis Tools meeting](https://indico.belle2.org/event/12666/)
 - [Recommendations talk for end users at the (S)L Working Group meeting](https://indico.belle2.org/event/12979/)
-- [Presentation at the "Challenges in Semileptonic B Decays" outlining new gateways for measurement combinations](https://indico.cern.ch/event/1345421/contributions/6084737/)
 - [Belle II note of the analysis that inspired the creation of SysVar (see especially Sections 3.1.4 and Appendix A)](https://docs.belle2.org/pub_data/documents/4547/)
 
 
@@ -143,5 +153,3 @@ We gratefully acknowledge the following individuals for their code contributions
 
 > 📊 Commit counts are based on Git history (`git shortlog -sne`) and may include merge commits.
 > They reflect authored commits; contributions via design, review, and discussion are also highly valued.
-
-
