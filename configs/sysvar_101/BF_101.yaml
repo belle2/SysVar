@@ -1,5 +1,5 @@
 correction_type: "BF"
-correlation: uncorrelated 
+correlation: uncorrelated
 
 dependant_variable: dmID
 
@@ -13,7 +13,7 @@ modes:
   Signal_decay_1:
     dmID: [11]
     daughters:
-      - [211] #For visualization purposes, this is the PDG IDs of the daughters of the mother particle. 
+      - [211] #For visualization purposes, this is the PDG IDs of the daughters of the mother particle.
     pdg_live: [0.53, 1.0E-02]
     decay_dec: 0.55
 
@@ -23,4 +23,6 @@ modes:
       - [211]
     pdg_live: [0.47, 1.1E-02]
     decay_dec: 0.45
+
+cov_matrix:
 

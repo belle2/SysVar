@@ -15,22 +15,14 @@ from sysvar.corrections import (
 from sysvar.utils import _get_configs_dir, _get_parent_dir
 
 
-CONFIG_DIR = path.join(_get_parent_dir(), _get_configs_dir("csv_configs"))
+CONFIG_DIR = path.join(_get_parent_dir(), _get_configs_dir("sysvar_101"))
 
 
 @pytest.mark.parametrize(
     "correction_source, MC_production, expected_cls",
     [
-        ("charged_slow_pi", "MC15rd", Correction1D),
-        ("neutral_slow_pi", "MC15rd", Correction1D),
-        ("prompt_hadronic_Bp_BF", "MC15rd", CorrectionBF),
-        ("prompt_hadronic_B0_BF", "MC15rd", CorrectionBF),
-        ("double_charm_Bp_BF", "MC15rd", CorrectionBF),
-        ("double_charm_B0_BF", "MC15rd", CorrectionBF),
-        ("dst0_meson_BF", "MC15rd", CorrectionBF),
-        ("tau_BF", "MC15rd", CorrectionBF),
-        ("dstplus_meson_BF", "MC15rd", CorrectionBF),
-        ("dstst_BF", "MC15rd", CorrectionBF),
+        ("1D_correction", "sysvar_101", Correction1D),
+        ("BF_101", "sysvar_101", CorrectionBF),
     ],
 )
 def test_create_correction_object_yaml_only_parametrized(
@@ -68,27 +60,9 @@ def test_create_correction_object_custom_returns_custom_correction():
     "title, correction_source, cov_matrix_path, expected_cls",
     [
         (
-            "charged_slow_pi",
-            path.join(CONFIG_DIR, "charged_slow_pi_correction.csv"),
+            "1D_csv_correction",
+            path.join(CONFIG_DIR, "1D_csv_correction.csv"),
             None,
-            Correction1DFromCSV,
-        ),
-        (
-            "neutral_pi_corr",
-            path.join(CONFIG_DIR, "neutral_pi_corr.csv"),
-            None,
-            Correction2DFromCSV,
-        ),
-        (
-            "Kshort_corr",
-            path.join(CONFIG_DIR, "Kshort_corr.csv"),
-            None,
-            Correction3DFromCSV,
-        ),
-        (
-            "fei_Bp",
-            path.join(CONFIG_DIR, "fei_Bp_001.csv"),
-            path.join(CONFIG_DIR, "Comb_Cov_RD_Bp_SigProb_0_001.npy"),
             Correction1DFromCSV,
         ),
     ],

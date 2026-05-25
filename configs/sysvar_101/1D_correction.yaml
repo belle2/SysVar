@@ -4,17 +4,19 @@ dependant_variable: p # This has to be the name of the basf2 variable
 unit: GeV
 title: $\mathrm{\pi^{+}_{s}}$
 
-min: [0.05, 0.12, 0.16]
-max: [0.12, 0.16, 0.2]
-corrections: [0.977, 0.989, 0.943]
+min: [0.5, 1.0]
+max: [1.0, 2.0]
+corrections: [1.5, 0.5]
 
 uncertainties:
   fully_correlated:
-    stat_corr: [0.023, 0.023, 0.023]
-    sys: [0.0032, 0.0032, 0.0032]
+    stat_corr: [0.02, 0.02]
+    sys: [0.0032, 0.003, 0.001]
   uncorrelated:
-    stat_uncorr: [0.014, 0.011, 0.020]
+    stat_uncorr: [0.03, 0.04,]
 
 # The prefix will be added here
 extra_cuts:
   PDG: [211, -211]
+
+cov_matrix:
